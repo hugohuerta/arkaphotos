@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-const CFG = { VERSION: '0.15.0', MIGRACION_ESPERADA: 13, URL_TTL: 3600 };
+const CFG = { VERSION: '0.16.0', MIGRACION_ESPERADA: 13, URL_TTL: 3600 };
 const $ = id => document.getElementById(id);
 const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
 const MAX = 32, BUCKET = 'arkaphoto';
@@ -644,7 +644,7 @@ $('btnTraer').addEventListener('click', async ()=>{
 const describeFalla = x => x.status==='existe'?'ya existe en el sistema':x.status==='omitida'?`omitida (${x.error})`:x.status===404?'no existe en la ruta':`HTTP ${x.status}${x.error?' '+x.error:''}`;
 
 // ---------- CARGA DE URL (texto o archivo .txt/.json) → análisis → cola persistente
-let urlsNuevas = [], archivoNombre = '';
+let archivoNombre = '';
 const RX_URL = /https?:\/\/[^\s"'<>\\\]\[,]+?\.(?:png|jpe?g)/gi;
 // Desenvuelve proxies de redimensión: la última aparición de http(s):// dentro de la URL es el original
 const desenvolver = u => { const i=Math.max(u.lastIndexOf('https://'), u.lastIndexOf('http://')); return i>0 ? u.slice(i) : u; };
@@ -662,47 +662,50 @@ $('urlsFile').addEventListener('change', async e=>{
   $('urlsTxt').value=urls.join('\n'); $('urlsFileN').textContent=`${f.name}: ${urls.length} URLs`; e.target.value='';
   $('btnAnalizar').click();
 });
-async function colaIndices(){
-  const { data } = await sb.from('arkaphoto_cola').select('lote,seq,estado');
-  const m=new Map(); (data||[]).forEach(r=>m.set(`${r.lote}-${r.seq}`, r.estado)); return m;
-}
 $('btnAnalizar').addEventListener('click', async ()=>{
-  const lineas=extraerUrls($('urlsTxt').value);
-  const enCola=await colaIndices();
-  const filas=[]; urlsNuevas=[]; const vistos=new Set(); const c={tot:lineas.length,nueva:0,existe:0,cola:0,rep:0,bad:0};
-  lineas.forEach((u,i)=>{
-    let nombreArch='', lote='', seq='', estado='', ok=false;
-    try{
-      const url=new URL(u); nombreArch=decodeURIComponent(url.pathname.split('/').pop()||'');
-      const m=nombreArch.match(RX);
-      if(url.protocol!=='https:') { estado='solo https'; c.bad++; }
-      else if(!m) { estado='nombre no reconocido'; c.bad++; }
-      else {
-        lote=`${m[1]}-${m[2].toLowerCase()}`; seq=parseInt(m[3],10); const k=`${lote}-${seq}`;
-        if(seq<1||seq>32){ estado='secuencia fuera de 1–32'; c.bad++; }
-        else if(lotes.get(lote)?.items.has(seq)){ estado='ya existe en el sistema'; c.existe++; }
-        else if(vistos.has(k)){ estado='repetida en la lista'; c.rep++; }
-        else if(enCola.has(k)){ estado='ya en cola ('+enCola.get(k)+')'; c.cola++; vistos.add(k); }
-        else { estado='nueva'; ok=true; vistos.add(k); c.nueva++; urlsNuevas.push({url:u,lote,seq,ext:m[5].toLowerCase(),nombre:`${lote}-${seq}.${m[5].toLowerCase()}`}); }
+  const btn=$('btnAnalizar'); btn.disabled=true;
+  try{
+    const lineas=extraerUrls($('urlsTxt').value);
+    // 1. agrupar por lote
+    const porLote=new Map(); let bad=0;
+    for(const u of lineas){
+      try{ const url=new URL(u); const nombreArch=decodeURIComponent(url.pathname.split('/').pop()||''); const m=nombreArch.match(RX);
+        if(url.protocol!=='https:'||!m){ bad++; continue; }
+        const seq=parseInt(m[3],10); if(seq<1||seq>32){ bad++; continue; }
+        const lote=`${m[1]}-${m[2].toLowerCase()}`, ext=m[5].toLowerCase(), base=u.slice(0,u.lastIndexOf('/'));
+        if(!porLote.has(lote)) porLote.set(lote,{ lote, ext, base, seqs:new Set() }); porLote.get(lote).seqs.add(seq);
+      }catch{ bad++; }
+    }
+    const lotesArr=[...porLote.values()]; const cid=cascUrls.valor();
+    $('uTot').textContent=lineas.length; $('uLotes').textContent=lotesArr.length; $('uBad').textContent=bad; $('urlsStats').hidden=!lineas.length;
+    if(!lotesArr.length){ $('urlsResumen').textContent='Sin URLs reconocidas'; return; }
+    // 2. sondear por tandas en el servidor y encolar conforme llegan resultados
+    let traer=0, comp=0, ex=0, enc=0, hechos=0, filas=[]; const pendientesRe=[];
+    const encolar=async rows=>{ for(let i=0;i<rows.length;i+=500){ const { error } = await sb.from('arkaphoto_cola').upsert(rows.slice(i,i+500),{ onConflict:'user_id,lote,seq', ignoreDuplicates:true }); if(error){ toast('Encolar: '+error.message); return; } } };
+    for(let i=0;i<lotesArr.length;i+=60){
+      const tanda=lotesArr.slice(i,i+60).map(L=>({ lote:L.lote, ext:L.ext, base:L.base, seqs:[...L.seqs] }));
+      $('urlsResumen').textContent=`Sondeando lotes… ${Math.min(i+60,lotesArr.length)} de ${lotesArr.length}`;
+      const r=await post('/api/cola',{ accion:'analizar', lotes:tanda },true);
+      if(!r.ok){ toast('Analizar: '+(r.j.error||r.status)); break; }
+      const rows=[];
+      for(const x of r.j.lotes){
+        const L=porLote.get(x.lote); if(!L) continue;
+        if(x.pendiente){ pendientesRe.push(L); continue; }
+        if(x.error){ filas.push(`<tr><td class="k">${esc(x.lote)}</td><td colspan="5" class="err">${esc(x.error)}</td></tr>`); continue; }
+        const listadas=[...L.seqs].filter(sq=>x.faltan.includes(sq)).length, completadas=x.faltan.length-listadas;
+        traer+=x.faltan.length; comp+=completadas; ex+=x.existen.length; enc+=x.encoladas.length; hechos++;
+        x.faltan.forEach(sq=>rows.push({ user_id:session.user.id, lote:x.lote, seq:sq, ext:L.ext, nombre:`${x.lote}-${sq}.${L.ext}`, url:`${L.base}/${x.lote}-${sq}.${L.ext}`, origen_archivo:archivoNombre||'texto', clasif_id:cid }));
+        if(filas.length<400) filas.push(`<tr><td class="k">${esc(x.lote)}</td><td>${L.seqs.size}</td><td>${x.tamano}</td><td><b>${x.faltan.length}</b>${completadas?` <span class="note">(+${completadas} completadas)</span>`:''}</td><td>${x.existen.length}</td><td>${x.encoladas.length}</td></tr>`);
       }
-    }catch{ estado='URL inválida'; c.bad++; }
-    if(filas.length<300) filas.push(`<tr><td>${i+1}</td><td class="k">${esc(nombreArch||u)}</td><td class="k">${esc(lote)}</td><td>${esc(seq)}</td><td><span class="pill ${ok?'ok':estado.startsWith('ya')?'warn':'miss'}">${esc(estado)}</span></td></tr>`);
-  });
-  $('uTot').textContent=c.tot; $('uNew').textContent=c.nueva; $('uEx').textContent=c.existe; $('uCola').textContent=c.cola; $('uRep').textContent=c.rep; $('uBad').textContent=c.bad;
-  $('urlsStats').hidden=!c.tot;
-  $('urlsBody').innerHTML=filas.join(''); $('urlsTabla').hidden=!filas.length; $('urlsTablaN').textContent = lineas.length>300?`Se muestran las primeras 300 de ${lineas.length}.`:'';
-  $('urlsResumen').textContent=`${c.tot} URLs · ${c.nueva} nuevas`;
-  $('btnEncolar').disabled=!urlsNuevas.length; $('btnEncolar').textContent=`Encolar ${urlsNuevas.length} nuevas`;
-});
-$('btnEncolar').addEventListener('click', async ()=>{
-  $('btnEncolar').disabled=true; let n=0;
-  for(let i=0;i<urlsNuevas.length;i+=500){
-    const tanda=urlsNuevas.slice(i,i+500).map(x=>({ ...x, user_id:session.user.id, origen_archivo:archivoNombre||null, clasif_id:cascUrls.valor() }));
-    const { error } = await sb.from('arkaphoto_cola').upsert(tanda, { onConflict:'user_id,lote,seq', ignoreDuplicates:true });
-    if(error){ toast('Encolar: '+error.message); break; }
-    n+=tanda.length; $('urlsResumen').textContent=`Encolando… ${n} de ${urlsNuevas.length}`;
-  }
-  toast(`${n} URLs en cola`); urlsNuevas=[]; $('urlsResumen').textContent=`${n} encoladas`; await colaEstado();
+      await encolar(rows);
+      $('uTraer').textContent=traer; $('uComp').textContent=comp; $('uEx').textContent=ex; $('uCola').textContent=enc;
+      $('urlsBody').innerHTML=filas.join(''); $('urlsTabla').hidden=!filas.length; $('urlsTablaN').textContent=filas.length>=400?'Se muestran los primeros 400 lotes.':'';
+      if(pendientesRe.length){ lotesArr.push(...pendientesRe.splice(0)); }
+    }
+    $('urlsResumen').textContent=`${hechos} lotes analizados · ${traer} fotos encoladas (${comp} completadas) · ${ex} ya existían`;
+    toast(`${traer} fotos en cola`); await colaEstado();
+    if(traer) $('btnColaIr').scrollIntoView({behavior:'smooth',block:'center'});
+  } finally { btn.disabled=false; }
 });
 
 // ---------- cola: estado y procesamiento en bucle
@@ -735,14 +738,6 @@ async function colaBucle(){
   if(lotes.size!==undefined){ await cargarImagenes(); if(vistaActual()==='galerias') renderGalerias(); }
 }
 $('btnColaIr').addEventListener('click', ()=>{ if(!colaCorriendo) colaBucle(); });
-let completando=false;
-$('btnColaCompletar').addEventListener('click', async ()=>{
-  if(completando||colaCorriendo) return; completando=true; $('btnColaCompletar').disabled=true; let lotes_=0, enc=0;
-  try{ while(true){ const r=await post('/api/cola',{ accion:'completar' },true); if(!r.ok){ toast('Completar: '+(r.j.error||r.status)); break; }
-    lotes_+=r.j.lotes; enc+=r.j.encoladas; $('colaTxt').textContent=`Completando lotes: ${lotes_} sondeados · ${enc} fotos encoladas · ${r.j.restantes} lotes por sondear`; await colaEstado(); if(r.j.fin||!r.j.lotes) break; } }
-  finally{ completando=false; $('btnColaCompletar').disabled=false; }
-  toast(`Completar: ${lotes_} lotes, ${enc} fotos nuevas en cola`);
-});
 $('btnColaPausa').addEventListener('click', ()=>{ colaCorriendo=false; $('colaTxt').textContent='Pausando al terminar la tanda actual…'; });
 $('btnColaRetry').addEventListener('click', async ()=>{ const r=await post('/api/cola',{ accion:'reintentar' },true); toast(r.ok?`${r.j.reencoladas} reencoladas`:(r.j.error||r.status)); await colaEstado(); });
 $('btnColaLimpiar').addEventListener('click', async ()=>{ const r=await post('/api/cola',{ accion:'limpiar' },true); toast(r.ok?`${r.j.borradas} filas borradas`:(r.j.error||r.status)); await colaEstado(); });

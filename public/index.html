@@ -1,4 +1,4 @@
-<!-- ARKAPHOTO v0.15.0 -->
+<!-- ARKAPHOTO v0.16.0 -->
 <!doctype html>
 <html lang="es">
 <head>
@@ -415,27 +415,28 @@ section.panel.col .cover{display:block}
         <label class="f">Detalle<select id="uDet"><option value="">—</option></select></label>
         <div class="full" style="align-items:center"><span class="note">Clasificación que recibirán los lotes al traerse (opcional; se aplica cuando baja la primera foto del lote).</span></div>
       </div>
-      <div class="row" style="margin-top:10px"><button class="primary" id="btnAnalizar">Analizar</button><button id="btnEncolar" disabled>Encolar nuevas</button><span class="note" id="urlsResumen"></span></div>
+      <div class="row" style="margin-top:10px"><button class="primary" id="btnAnalizar">Analizar y encolar</button><span class="note" id="urlsResumen"></span></div>
     </div>
     <div class="panel" id="urlsStats" hidden style="margin-top:18px">
       <div class="stats">
-        <div><b id="uTot">0</b><span>URLs</span></div>
-        <div><b id="uNew">0</b><span>nuevas</span></div>
+        <div><b id="uTot">0</b><span>URLs en el archivo</span></div>
+        <div><b id="uLotes">0</b><span>lotes</span></div>
+        <div><b id="uTraer">0</b><span>fotos a traer</span></div>
+        <div><b id="uComp">0</b><span>de ellas, completadas</span></div>
         <div><b id="uEx">0</b><span>ya existen</span></div>
         <div><b id="uCola">0</b><span>ya en cola</span></div>
-        <div><b id="uRep">0</b><span>repetidas</span></div>
         <div><b id="uBad">0</b><span>no reconocidas</span></div>
       </div>
     </div>
     <div class="panel" id="urlsTabla" hidden style="margin-top:18px">
       <p class="note" id="urlsTablaN" style="margin-bottom:8px"></p>
-      <div class="tw"><table class="t"><thead><tr><th>#</th><th>Archivo</th><th>Lote</th><th>Seq</th><th>Estado</th></tr></thead><tbody id="urlsBody"></tbody></table></div>
+      <div class="tw"><table class="t"><thead><tr><th>Lote</th><th>En lista</th><th>Tamaño</th><th>A traer</th><th>Ya existen</th><th>En cola</th></tr></thead><tbody id="urlsBody"></tbody></table></div>
     </div>
 
     <div class="panel" style="margin-top:18px">
       <div class="row" style="justify-content:space-between;margin-bottom:10px">
         <h2 style="margin:0">Cola de descarga</h2>
-        <div class="row"><button id="btnColaCompletar" title="Sondea cada lote de la cola en la base de su URL y encola las fotos que falten">🔎 Completar lotes</button><button class="primary" id="btnColaIr">▶ Procesar</button><button id="btnColaPausa" hidden>⏸ Pausar</button><button id="btnColaRetry">Reintentar errores</button><button class="quiet" id="btnColaLimpiar">Limpiar terminadas</button></div>
+        <div class="row"><button class="primary" id="btnColaIr">▶ Procesar</button><button id="btnColaPausa" hidden>⏸ Pausar</button><button id="btnColaRetry">Reintentar errores</button><button class="quiet" id="btnColaLimpiar">Limpiar terminadas</button></div>
       </div>
       <div id="colaBarra" class="prog" style="min-width:100%;height:30px;margin-bottom:10px"><i style="width:0"></i><b id="colaBarraTxt">sin cola</b></div>
       <div class="stats">

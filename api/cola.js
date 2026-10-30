@@ -39,6 +39,7 @@ export default async function handler(req, res) {
   }
 
   if (accion === 'completar') return completar(admin, user, res);
+  if (accion === 'analizar') return analizar(admin, user, req.body?.lotes || [], res);
 
   const n = Math.min(Math.max(Number(req.body?.n) || 24, 1), 48);
   const inicio = Date.now();
@@ -130,4 +131,44 @@ async function completar(admin, user, res) {
     lotesHechos++;
   }
   res.status(200).json({ lotes: lotesHechos, encoladas, restantes: pendientes.length - lotesHechos, fin: pendientes.length - lotesHechos === 0, ms: Date.now() - inicio });
+}
+
+// ---- Analizar: para cada lote recibido {lote, ext, base, seqs}, sondea el tamaño en su base (o usa el guardado)
+//      y devuelve qué posiciones faltan por traer y cuáles ya existen. No encola; el navegador encola con el resultado.
+async function analizar(admin, user, lotesIn, res) {
+  const inicio = Date.now();
+  const lista = (Array.isArray(lotesIn) ? lotesIn : []).slice(0, 80).filter(l => /^\d+-[0-9a-f]{32}$/.test(l.lote || '') && ['jpg', 'jpeg', 'png'].includes(l.ext));
+  if (!lista.length) return res.status(200).json({ lotes: [] });
+  const keys = lista.map(l => l.lote);
+  const [{ data: meta }, { data: imgs }, { data: enCola }] = await Promise.all([
+    admin.from('arkaphoto_lotes').select('lote,tamano,sondeado_en').eq('user_id', user.id).in('lote', keys),
+    admin.from('arkaphoto_imagenes').select('lote,seq').eq('user_id', user.id).in('lote', keys),
+    admin.from('arkaphoto_cola').select('lote,seq,estado').eq('user_id', user.id).in('lote', keys)
+  ]);
+  const metaM = new Map((meta || []).map(m => [m.lote, m]));
+  const imgM = new Map(), colaM = new Map();
+  (imgs || []).forEach(r => { if (!imgM.has(r.lote)) imgM.set(r.lote, new Set()); imgM.get(r.lote).add(r.seq); });
+  (enCola || []).forEach(r => { if (!colaM.has(r.lote)) colaM.set(r.lote, new Map()); colaM.get(r.lote).set(r.seq, r.estado); });
+  const out = []; const pendientes = lista.slice();
+  const worker = async () => {
+    while (pendientes.length) {
+      const L = pendientes.shift(); let host;
+      try { const u = new URL(L.base); if (u.protocol !== 'https:') throw 0; host = u.hostname; } catch { out.push({ lote: L.lote, error: 'base inválida' }); continue; }
+      if (!hostPermitido(host)) { out.push({ lote: L.lote, error: 'host no permitido' }); continue; }
+      const conocidas = new Set([...(L.seqs || []).map(Number), ...(imgM.get(L.lote) || []), ...(colaM.get(L.lote)?.keys() || [])]);
+      const minimo = pow2(Math.max(1, ...conocidas)); const m = metaM.get(L.lote);
+      let tamano = m?.sondeado_en && m.tamano >= minimo ? m.tamano : null;
+      if (!tamano && Date.now() - inicio < PRESUPUESTO_MS) {
+        tamano = minimo;
+        for (const t of ESCALA) { if (t <= minimo) break; if (await existe(`${L.base}/${L.lote}-${t}.${L.ext}`)) { tamano = t; break; } }
+        await admin.from('arkaphoto_lotes').upsert({ user_id: user.id, lote: L.lote, tamano, sondeado_en: new Date().toISOString() }, { onConflict: 'user_id,lote' });
+      }
+      if (!tamano) { out.push({ lote: L.lote, pendiente: true }); continue; }
+      const existen = [...(imgM.get(L.lote) || [])], encoladas = [...(colaM.get(L.lote)?.keys() || [])];
+      const faltan = []; for (let i = 1; i <= tamano; i++) if (!imgM.get(L.lote)?.has(i) && !colaM.get(L.lote)?.has(i)) faltan.push(i);
+      out.push({ lote: L.lote, tamano, existen, encoladas, faltan });
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(6, lista.length) }, worker));
+  res.status(200).json({ lotes: out, ms: Date.now() - inicio });
 }
