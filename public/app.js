@@ -194,7 +194,11 @@ function renderInicio(){
     if(dfil.hasta && f > new Date(dfil.hasta+'T23:59:59')) continue;
     if(dfil.sub && String(ruta[1]?.id)!==dfil.sub) continue;
     if(dfil.q){ const texto=[etiqueta(key), key, meta.nombre, meta.notas, ...ruta.map(c=>c.nombre), ...tagsDe(key).map(t=>t.nombre)].filter(Boolean).join(' ').toLowerCase(); if(!texto.includes(dfil.q)) continue; }
-    mostrados++;  $('dFotos').textContent=fotos; $('dFotosSub').textContent=`${lotes.size} lotes · ${traidas} traídas${ocultas?` · ${ocultas} ocultas`:''}`;
+    mostrados++;
+    const rutaTxt=ruta.map(c=>esc(c.nombre)).join(' › ');
+    rows.push(`<tr><td style="white-space:nowrap">${fmtFecha(f)}</td><td><a href="#galerias" class="etq" style="font-size:.9rem" title="${esc(key)}">${esc(etiqueta(key))}</a></td><td class="ruta">${rutaTxt||'<span class="pill warn">sin clasificar</span>'}</td><td>${r.n-r.traidas}</td><td>${r.traidas}</td><td>${r.faltan}</td><td>${fmt(r.bytes)}</td><td><span class="pill ${r.faltan?'miss':'ok'}">${r.faltan?'faltan '+r.faltan:'completo'}</span></td></tr>`);
+  }
+  $('dFotos').textContent=fotos; $('dFotosSub').textContent=`${lotes.size} lotes · ${traidas} traídas${ocultas?` · ${ocultas} ocultas`:''}`;
   $('dEspacio').textContent=fmt(bytes); $('dEspacioSub').textContent=`${(bytes/1073741824).toFixed(3)} GB en el bucket`;
   const gb=bytes/1073741824, cobrable=Math.max(0, gb-cfg.gbInc), costo=cobrable*cfg.tarifa;
   $('dCosto').textContent = cfg.tarifa ? `US$${costo.toFixed(costo<1?3:2)}` : '—';
