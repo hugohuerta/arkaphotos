@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-const CFG = { VERSION: '0.20.0', MIGRACION_ESPERADA: 14, URL_TTL: 3600 };
+const CFG = { VERSION: '0.20.1', MIGRACION_ESPERADA: 14, URL_TTL: 3600 };
 const $ = id => document.getElementById(id);
 const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
 const MAX = 32, BUCKET = 'arkaphoto';
@@ -710,16 +710,22 @@ $('btnTraer').addEventListener('click', async ()=>{
   await cargarImagenes();
   const porLote = new Map(); let yaEstaban=0;
   lastMissing.forEach(({key,n})=>{ const L=lotes.get(key); if(!L) return; if(L.items.has(n)){ yaEstaban++; return; } if(!porLote.has(key)) porLote.set(key,{ext:L.ext,seqs:[]}); porLote.get(key).seqs.push(n); });
-  let ok=0, no=0, ex=0; const fallas=[];
+  let ok=0, no=0, ex=0, inexistentes=0; const fallas=[], sinRuta=new Map(); // lote -> seqs que el origen ya no tiene (404)
   for(const [lote,{ext,seqs}] of porLote){
     $('traerTxt').textContent=`Trayendo ${seqs.length} del lote ${lote}…`;
     const r = await post('/api/traer',{lote,ext,seqs},true);
     if(!r.ok){ fallas.push(`${lote}: ${r.j.error||r.status}`); continue; }
-    r.j.resultados.forEach(x=>{ if(x.ok) ok++; else if(x.status==='existe') ex++; else { no++; fallas.push(`${x.nombre}: ${describeFalla(x)}`); } });
+    r.j.resultados.forEach(x=>{ if(x.ok) ok++; else if(x.status==='existe') ex++; else if(x.status===404){ inexistentes++; if(!sinRuta.has(x.lote)) sinRuta.set(x.lote,[]); sinRuta.get(x.lote).push(x.seq); } else { no++; fallas.push(`${x.nombre}: ${describeFalla(x)}`); } });
   }
   await cargarImagenes(); render();
   $('faltantes').hidden=false; $('pregunta').hidden=true;
-  $('traerTxt').textContent = `Traídas: ${ok}. Ya estaban en el sistema: ${ex+yaEstaban}. No encontradas o con error: ${no}.` + (fallas.length?`\n${fallas.join('\n')}`:'');
+  const lineas=[`Traídas: ${ok}. Ya estaban en el sistema: ${ex+yaEstaban}. No existen en la ruta: ${inexistentes}. Con error: ${no}.`];
+  if(inexistentes){
+    lineas.push('', `⚠ ${inexistentes} foto${inexistentes===1?'':'s'} no existe${inexistentes===1?'':'n'} en la ruta pública: el origen ya no las tiene y no se pueden recuperar desde la web. El lote se queda con lo que se subió; solo crecerá si esas fotos llegan por Carga de fotos (archivo local).`);
+    for(const [lote,sq] of sinRuta) lineas.push(`${etiqueta(lote)} (${lote}): faltan ${sq.sort((a,b)=>a-b).join(', ')}`);
+  }
+  if(fallas.length) lineas.push('', 'Errores (reintentables):', ...fallas);
+  $('traerTxt').textContent = lineas.join('\n');
   $('btnTraer').disabled=false;
 });
 const describeFalla = x => x.status==='existe'?'ya existe en el sistema':x.status==='omitida'?`omitida (${x.error})`:x.status===404?'no existe en la ruta':`HTTP ${x.status}${x.error?' '+x.error:''}`;
