@@ -57,7 +57,7 @@ export default async function handler(req, res) {
   const { data: existentes } = await admin.from('arkaphoto_imagenes').select('lote,seq').eq('user_id', user.id).in('lote', lotesQ);
   const ya = new Set((existentes || []).map(r => `${r.lote}-${r.seq}`));
 
-  const cola = lote.slice(); const res_ = { traidas: 0, existe: 0, error: 0, noexiste: 0, extAlterna: 0, resondeados: 0, encoladas: 0 }; const clasificados = new Set(), resondeados = new Set();
+  const cola = lote.slice(); const res_ = { traidas: 0, existe: 0, error: 0, noexiste: 0, extAlterna: 0, resondeados: 0, encoladas: 0 }; const clasificados = new Set(), resondeados = new Set(), validados = new Set();
   const marcar = (fila, campos) => admin.from('arkaphoto_cola').update({ ...campos, procesado_en: new Date().toISOString() }).eq('id', fila.id);
   const cab = { 'User-Agent': UA, Accept: 'image/*,*/*;q=0.8' };
   // Si una foto apareció con la otra extensión, el tamaño sondeado del lote pudo quedar corto: se vuelve a sondear con ambas extensiones y se encola lo nuevo.
@@ -85,7 +85,11 @@ export default async function handler(req, res) {
         // Preferencia PNG > JPG independientemente de la extensión listada; el lote puede mezclar ambas
         const { r, ext: e } = await bajarSeq(t.url, t.ext, cab);
         if (r.ok && e !== t.ext) { Object.assign(t, { ext: e, url: conExt(t.url, e), nombre: `${t.lote}-${t.seq}.${e}` }); await marcar(t, { ext: e, url: t.url, nombre: t.nombre }); res_.extAlterna++; await resondear(t); }
-        if (r.status === 404) { await marcar(t, { estado: 'error', http_status: 404, error: 'no existe en la ruta (ni .png ni .jpg): no recuperable desde la web', intentos: MAX_INTENTOS }); res_.noexiste++; continue; }
+        if (r.status === 404) {
+          await marcar(t, { estado: 'error', http_status: 404, error: 'no existe en la ruta (ni .png ni .jpg): no recuperable desde la web', intentos: MAX_INTENTOS }); res_.noexiste++;
+          if (!validados.has(t.lote)) { validados.add(t.lote); await admin.from('arkaphoto_lotes').upsert({ user_id: user.id, lote: t.lote, validado_en: new Date().toISOString() }, { onConflict: 'user_id,lote' }); }
+          continue;
+        }
         if (r.status === 429 || r.status === 403) { // el origen nos frena: devolver a pendiente y cortar la tanda
           await marcar(t, { estado: 'pendiente', http_status: r.status, error: `HTTP ${r.status} (origen frenó)`, intentos: t.intentos });
           res_.frenado = r.status; const resto = cola.splice(0); if (resto.length) await admin.from('arkaphoto_cola').update({ estado: 'pendiente' }).in('id', resto.map(x => x.id)); return;

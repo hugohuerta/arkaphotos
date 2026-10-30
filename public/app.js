@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-const CFG = { VERSION: '0.23.0', MIGRACION_ESPERADA: 14, URL_TTL: 3600 };
+const CFG = { VERSION: '0.24.0', MIGRACION_ESPERADA: 15, URL_TTL: 3600 };
 const $ = id => document.getElementById(id);
 const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
 const MAX = 32, BUCKET = 'arkaphoto';
@@ -134,7 +134,7 @@ async function cargarClasif(){
   const sel=$('fTipo'); sel.innerHTML='<option value="">Todos los tipos</option>'+hijos(null).map(t=>`<option value="${t.id}">${esc(t.nombre)}</option>`).join(''); sel.value=fil.tipo;
 }
 async function cargarLotesMeta(){
-  let data; try{ data = await todas(()=>sb.from('arkaphoto_lotes').select('lote,nombre,clasif_id,notas,portada_seq,tamano,sondeado_en').order('lote')); }catch(e){ toast('Error leyendo lotes: '+e.message); return; }
+  let data; try{ data = await todas(()=>sb.from('arkaphoto_lotes').select('lote,nombre,clasif_id,notas,portada_seq,tamano,sondeado_en,validado_en').order('lote')); }catch(e){ toast('Error leyendo lotes: '+e.message); return; }
   lotesMeta.clear(); data.forEach(m=>lotesMeta.set(m.lote,m));
 }
 const hijos = pid => [...clasif.values()].filter(c=>(c.parent_id??null)===(pid??null)).sort((a,b)=>a.orden-b.orden||a.nombre.localeCompare(b.nombre));
@@ -630,7 +630,7 @@ function render(){
   const hist = cargaTab==='hist';
   let keys = hist ? [...lotes.keys()] : [...sesionLotes].filter(k=>lotes.has(k));
   if(hist && histFiltro!=='todos') keys = keys.filter(k=>{ const L=lotes.get(k), meta=lotesMeta.get(k)||{}; const f=faltantes(L,k).length;
-    return histFiltro==='incompletos' ? f>0 : histFiltro==='completos' ? f===0 : histFiltro==='sinclasif' ? !meta.clasif_id : histFiltro==='sinsondear' ? !meta.sondeado_en : true; });
+    return histFiltro==='incompletos' ? f>0 : histFiltro==='completos' ? f===0 : histFiltro==='sinclasif' ? !meta.clasif_id : histFiltro==='sinsondear' ? !meta.sondeado_en : histFiltro==='validados' ? !!meta.validado_en : histFiltro==='porvalidar' ? (f>0 && !meta.validado_en) : true; });
   if(hist){
     const tam=Number($('histTam').value)||0, fot=$('histFotos').value, falt=Number($('histFalt').value)||0;
     const [fMin,fMax]=fot?fot.split('-').map(Number):[0,0];
@@ -660,7 +660,7 @@ function render(){
     const d=document.createElement('div'); d.className='lote'; d.dataset.lote=key;
     const ruta=rutaClasif((lotesMeta.get(key)||{}).clasif_id).map(c=>esc(c.nombre)).join(' › ');
     const sel = hist?selHist:selCarga;
-    d.innerHTML = `<div class="lote-head"><input type="checkbox" class="selh" data-lote="${esc(key)}" ${sel.has(key)?'checked':''}><span class="etq" style="font-size:.9rem" title="${esc(key)}">${esc(etiqueta(key))}</span><span class="ruta">${ruta||'<span class="pill warn">sin clasificar</span>'}</span><span class="pill ${miss.length?'miss':'ok'}">${miss.length?miss.length+' faltantes':'completo'}</span>${barra(L.items.size, hasta, !!(lotesMeta.get(key)||{}).sondeado_en)}${hist?`<button class="chico validar" data-lote="${esc(key)}" title="Vuelve a sondear 32/16/8/4/2 con ambas extensiones, lista faltantes y busca PNG de mejor calidad">Validar</button>`:''}</div><div class="valres" hidden></div>`;
+    d.innerHTML = `<div class="lote-head"><input type="checkbox" class="selh" data-lote="${esc(key)}" ${sel.has(key)?'checked':''}><span class="etq" style="font-size:.9rem" title="${esc(key)}">${esc(etiqueta(key))}</span><span class="ruta">${ruta||'<span class="pill warn">sin clasificar</span>'}</span><span class="pill ${miss.length?'miss':'ok'}">${miss.length?miss.length+' faltantes':'completo'}</span>${(lotesMeta.get(key)||{}).validado_en?`<span class="pill val" title="Se comprobó en el origen que las faltantes no existen (${fmtFecha(new Date(lotesMeta.get(key).validado_en))}). La validación masiva lo omite.">VALIDADO PREVIAMENTE</span>`:''}${barra(L.items.size, hasta, !!(lotesMeta.get(key)||{}).sondeado_en)}${hist?`<button class="chico validar" data-lote="${esc(key)}" title="Vuelve a sondear 32/16/8/4/2 con ambas extensiones, lista faltantes y busca PNG de mejor calidad">Validar</button>`:''}</div><div class="valres" hidden></div>`;
     const g=document.createElement('div'); g.className='seq';
     for(let i=1;i<=MAX;i++){
       const c=document.createElement('div'); c.className='cell'; c.dataset.n=i;
@@ -689,6 +689,14 @@ function render(){
   const dl=$('dupList'); dl.replaceChildren();
   dupes.forEach(d=>{ const li=document.createElement('li'); li.innerHTML=`<span class="n ${d.ok?'okc':''}">${d.ok?'✓':'!'}</span><span>${esc(d.name)}</span><span class="note">${esc(d.estado)}</span>`; dl.appendChild(li); });
 }
+// Marca "validado previamente": se comprobó contra el origen que las faltantes no existen. Se limpia sola si entran fotos (trigger).
+async function marcarValidado(keys, valor=true){
+  const ahora=valor?new Date().toISOString():null; let n=0;
+  for(const key of keys){ const meta=lotesMeta.get(key)||{}; const row={ ...meta, user_id:session.user.id, lote:key, validado_en:ahora, actualizado:new Date().toISOString() };
+    const { error } = await sb.from('arkaphoto_lotes').upsert(row); if(error){ toast(`${etiqueta(key)}: ${error.message}`); continue; } lotesMeta.set(key,row); n++; }
+  return n;
+}
+const omitirValidados = () => $('histOmitirVal').checked;
 // Validar un lote individual: resondeo forzado (ambas extensiones) + faltantes + PNG disponibles para las JPG
 async function validarLote(key, btn){
   if(!cfg.base){ toast('Configura la ruta pública en Admin'); return; }
@@ -730,13 +738,16 @@ $('btnNuevaCarga').addEventListener('click', async ()=>{
 ['histOrden','histTam','histFotos'].forEach(id=>$(id).addEventListener('change',render)); $('histFalt').addEventListener('input',render);
 $('histFiltro').addEventListener('click', e=>{ const b=e.target.closest('button[data-f]'); if(!b) return; histFiltro=b.dataset.f; render(); });
 $('btnSelTodos').addEventListener('click', ()=>{ const visibles=[...document.querySelectorAll('#histLotes input.selh')].map(c=>c.dataset.lote); const quitar=visibles.length && visibles.every(k=>selHist.has(k)); visibles.forEach(k=>quitar?selHist.delete(k):selHist.add(k)); render(); });
+$('btnMarcarVal').addEventListener('click', async ()=>{ const keys=[...selHist].filter(k=>lotes.has(k)); if(!keys.length){ toast('Selecciona al menos un lote'); return; } const n=await marcarValidado(keys,true); toast(`${n} lote(s) marcados VALIDADO PREVIAMENTE`); selHist.clear(); render(); });
+$('btnQuitarVal').addEventListener('click', async ()=>{ const keys=[...selHist].filter(k=>lotes.has(k)&&(lotesMeta.get(k)||{}).validado_en); if(!keys.length){ toast('Ningún seleccionado tiene la marca'); return; } const n=await marcarValidado(keys,false); toast(`Marca quitada en ${n} lote(s)`); selHist.clear(); render(); });
 $('btnMasivo').addEventListener('click', ()=>{ if(!selHist.size){ toast('Selecciona al menos un lote'); return; } $('masivo').hidden=false; });
 $('btnMasivoNo').addEventListener('click', ()=>{ $('masivo').hidden=true; });
 $('btnMasivoOk').addEventListener('click', async ()=>{ const cid=cascMasivo.valor(); if(!cid){ toast('Elige al menos el Tipo'); return; } const n=await clasificarLotes([...selHist].filter(k=>lotes.has(k)), cid); toast(`${n} lote(s) clasificados`); $('masivo').hidden=true; selHist.clear(); render(); });
-$('btnSondearSel').addEventListener('click', async ()=>{ const keys=(selHist.size?[...selHist]:[...lotes.keys()]).filter(k=>lotes.has(k)); toast('Sondeando…'); const n=await sondear(keys,true); toast(`${n} lote(s) sondeados`); render(); });
+$('btnSondearSel').addEventListener('click', async ()=>{ const keys=(selHist.size?[...selHist]:[...lotes.keys()]).filter(k=>lotes.has(k) && !(omitirValidados() && (lotesMeta.get(k)||{}).validado_en)); if(!keys.length){ toast('Nada que sondear (todos validados previamente)'); return; } toast('Sondeando…'); const n=await sondear(keys,true); toast(`${n} lote(s) sondeados`); render(); });
 $('btnValidarSel').addEventListener('click', async ()=>{
   await cargarImagenes(); await cargarLotesMeta();
-  const keys=(selHist.size?[...selHist]:[...lotes.keys()]).filter(k=>lotes.has(k));
+  const keys=(selHist.size?[...selHist]:[...lotes.keys()]).filter(k=>lotes.has(k) && !(omitirValidados() && (lotesMeta.get(k)||{}).validado_en));
+  if(!keys.length){ toast('Nada que validar (todos validados previamente)'); return; }
   await sondear(keys, selHist.size>0); render(); // con selección: resondeo forzado (ambas extensiones); sin selección: solo los no sondeados
   lastMissing=[]; keys.forEach(key=>{ const L=lotes.get(key); faltantes(L,key).forEach(n=>lastMissing.push({key,L,n})); });
   if(!lastMissing.length){ toast('Sin faltantes en '+(selHist.size?'los seleccionados':'ningún lote')); $('faltantes').hidden=true; return; }
@@ -760,19 +771,24 @@ $('btnTraer').addEventListener('click', async ()=>{
   await cargarImagenes();
   const porLote = new Map(); let yaEstaban=0;
   lastMissing.forEach(({key,n})=>{ const L=lotes.get(key); if(!L) return; if(L.items.has(n)){ yaEstaban++; return; } if(!porLote.has(key)) porLote.set(key,{ext:L.ext,seqs:[]}); porLote.get(key).seqs.push(n); });
-  let ok=0, no=0, ex=0, inexistentes=0; const fallas=[], sinRuta=new Map(), resondear=new Set(); // sinRuta: lote -> seqs que el origen no tiene con ninguna extensión
+  let ok=0, no=0, ex=0, inexistentes=0; const fallas=[], sinRuta=new Map(), resondear=new Set(), traidasPorLote=new Map(); // sinRuta: lote -> seqs que el origen no tiene con ninguna extensión
   for(const [lote,{ext,seqs}] of porLote){
     $('traerTxt').textContent=`Trayendo ${seqs.length} del lote ${lote}…`;
     const r = await post('/api/traer',{lote,ext,seqs},true);
     if(!r.ok){ fallas.push(`${lote}: ${r.j.error||r.status}`); continue; }
-    r.j.resultados.forEach(x=>{ if(x.extAlterna) resondear.add(x.lote); if(x.ok) ok++; else if(x.status==='existe') ex++; else if(x.status===404){ inexistentes++; if(!sinRuta.has(x.lote)) sinRuta.set(x.lote,[]); sinRuta.get(x.lote).push(x.seq); } else { no++; fallas.push(`${x.nombre}: ${describeFalla(x)}`); } });
+    r.j.resultados.forEach(x=>{ if(x.extAlterna) resondear.add(x.lote); if(x.ok){ ok++; traidasPorLote.set(x.lote,(traidasPorLote.get(x.lote)||0)+1); return; } else if(x.status==='existe') ex++; else if(x.status===404){ inexistentes++; if(!sinRuta.has(x.lote)) sinRuta.set(x.lote,[]); sinRuta.get(x.lote).push(x.seq); } else { no++; fallas.push(`${x.nombre}: ${describeFalla(x)}`); } });
   }
   await cargarImagenes();
+  // Lotes donde el origen no tenía nada de lo que faltaba → VALIDADO PREVIAMENTE (la validación masiva los omitirá)
+  const marcar=[];
+  for(const [lote] of porLote){ const L=lotes.get(lote); if(!L) continue; const faltan=faltantes(L,lote).length; const sinExito=(sinRuta.get(lote)||[]).length>0 && !resondear.has(lote); const trajo=traidasPorLote.get(lote)||0; if(faltan>0 && sinExito && !trajo && !fallas.some(f=>f.startsWith(lote))) marcar.push(lote); }
+  const marcados=marcar.length?await marcarValidado(marcar,true):0;
   // Alguna foto respondió con la otra extensión (.jpg↔.png): el tamaño del lote pudo quedar corto; se sondea otra vez con ambas
   let nuevos=0; if(resondear.size){ $('traerTxt').textContent='Volviendo a sondear lotes con extensión mixta…'; await sondear([...resondear],true); nuevos=[...resondear].reduce((a,k)=>a+faltantes(lotes.get(k),k).length,0); }
   render();
   $('faltantes').hidden=false; $('pregunta').hidden=true;
   const lineas=[`Traídas: ${ok}. Ya estaban en el sistema: ${ex+yaEstaban}. No existen en la ruta: ${inexistentes}. Con error: ${no}.`];
+  if(marcados) lineas.push(`${marcados} lote${marcados===1?'':'s'} marcado${marcados===1?'':'s'} VALIDADO PREVIAMENTE: sus faltantes no existen en el origen; la validación masiva ya no los tocará.`);
   if(resondear.size) lineas.push(`${resondear.size} lote${resondear.size===1?'':'s'} con extensión mixta (.jpg y .png): se volvió a sondear su tamaño${nuevos?`; ahora faltan ${nuevos} más, vuelve a pulsar TRAER`:''}.`);
   if(inexistentes){
     lineas.push('', `⚠ ${inexistentes} foto${inexistentes===1?'':'s'} no existe${inexistentes===1?'':'n'} en la ruta pública (ni .jpg ni .png): el origen ya no las tiene y no se pueden recuperar desde la web. El lote se queda con lo que se subió; solo crecerá si esas fotos llegan por Carga de fotos (archivo local).`);
