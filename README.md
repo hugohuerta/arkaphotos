@@ -27,6 +27,7 @@ supabase/09_ocultas_portada.sql fotos ocultas y portada por lote
 supabase/10_tamano_lote.sql tamaño de lote sondeado
 supabase/11_dimensiones.sql ancho/alto por foto
 supabase/12_cola.sql      cola persistente de URLs
+supabase/13_cola_clasif.sql clasificación elegida al encolar
 public/app.js            JS de la app (separado del HTML por la CSP)
 api/version.js           { app, version, migracion_esperada, migracion_aplicada }
 vercel.json              cabeceras de seguridad (CSP, HSTS, no-referrer)
@@ -34,7 +35,7 @@ vercel.json              cabeceras de seguridad (CSP, HSTS, no-referrer)
 
 ## 1. Supabase
 
-1. Crear proyecto. SQL Editor → ejecutar `supabase/01_inicial.sql`, `02_otp.sql`, `03_seguridad.sql`, `04_grants.sql`, `05_galerias.sql`, `06_clasificacion.sql`, `07_tags.sql`, `08_clasif_por_foto.sql`, `09_ocultas_portada.sql`, `10_tamano_lote.sql`, `11_dimensiones.sql` y `12_cola.sql` en orden.
+1. Crear proyecto. SQL Editor → ejecutar `supabase/01_inicial.sql`, `02_otp.sql`, `03_seguridad.sql`, `04_grants.sql`, `05_galerias.sql`, `06_clasificacion.sql`, `07_tags.sql`, `08_clasif_por_foto.sql`, `09_ocultas_portada.sql`, `10_tamano_lote.sql`, `11_dimensiones.sql`, `12_cola.sql` y `13_cola_clasif.sql` en orden.
 2. **Authentication → Providers → Email**: dejar habilitado (la sesión se abre con un enlace mágico generado en servidor; el correo lo manda Resend, no Supabase).
 3. Copiar de **Project Settings → API**: Project URL, anon key, service_role key.
 

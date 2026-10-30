@@ -55,7 +55,7 @@ export default async function handler(req, res) {
   const { data: existentes } = await admin.from('arkaphoto_imagenes').select('lote,seq').eq('user_id', user.id).in('lote', lotesQ);
   const ya = new Set((existentes || []).map(r => `${r.lote}-${r.seq}`));
 
-  const cola = lote.slice(); const res_ = { traidas: 0, existe: 0, error: 0 };
+  const cola = lote.slice(); const res_ = { traidas: 0, existe: 0, error: 0 }; const clasificados = new Set();
   const marcar = (fila, campos) => admin.from('arkaphoto_cola').update({ ...campos, procesado_en: new Date().toISOString() }).eq('id', fila.id);
   const worker = async () => {
     while (cola.length) {
@@ -77,6 +77,10 @@ export default async function handler(req, res) {
           { user_id: user.id, lote: t.lote, seq: t.seq, ext: t.ext, nombre: t.nombre, ruta, bytes: buf.length, origen: 'traida', url_origen: t.url, ancho, alto },
           { onConflict: 'user_id,lote,seq' });
         if (ins.error) throw new Error(ins.error.message);
+        if (t.clasif_id && !clasificados.has(t.lote)) {
+          clasificados.add(t.lote);
+          await admin.from('arkaphoto_lotes').upsert({ user_id: user.id, lote: t.lote, clasif_id: t.clasif_id, actualizado: new Date().toISOString() }, { onConflict: 'user_id,lote' });
+        }
         await marcar(t, { estado: 'traida', http_status: 200, bytes: buf.length, error: null }); res_.traidas++;
       } catch (e) {
         const intentos = t.intentos + 1;
@@ -101,10 +105,10 @@ async function existe(url) {
 }
 async function completar(admin, user, res) {
   const inicio = Date.now();
-  const { data: filas } = await admin.from('arkaphoto_cola').select('lote,seq,ext,url').eq('user_id', user.id).order('id').limit(5000);
+  const { data: filas } = await admin.from('arkaphoto_cola').select('lote,seq,ext,url,clasif_id').eq('user_id', user.id).order('id').limit(5000);
   if (!filas?.length) return res.status(200).json({ lotes: 0, encoladas: 0, restantes: 0, fin: true });
   const porLote = new Map();
-  for (const f of filas) { if (!porLote.has(f.lote)) porLote.set(f.lote, { ext: f.ext, base: f.url.slice(0, f.url.lastIndexOf('/')), seqs: new Set() }); porLote.get(f.lote).seqs.add(f.seq); }
+  for (const f of filas) { if (!porLote.has(f.lote)) porLote.set(f.lote, { ext: f.ext, base: f.url.slice(0, f.url.lastIndexOf('/')), seqs: new Set(), clasif_id: f.clasif_id || null }); const L = porLote.get(f.lote); L.seqs.add(f.seq); if (!L.clasif_id && f.clasif_id) L.clasif_id = f.clasif_id; }
   const keys = [...porLote.keys()];
   const { data: meta } = await admin.from('arkaphoto_lotes').select('lote,sondeado_en').eq('user_id', user.id).in('lote', keys);
   const hechos = new Set((meta || []).filter(m => m.sondeado_en).map(m => m.lote));
@@ -121,7 +125,7 @@ async function completar(admin, user, res) {
     for (const t of ESCALA) { if (t <= minimo) break; if (await existe(`${L.base}/${k}-${t}.${L.ext}`)) { tamano = t; break; } }
     await admin.from('arkaphoto_lotes').upsert({ user_id: user.id, lote: k, tamano, sondeado_en: new Date().toISOString() }, { onConflict: 'user_id,lote' });
     const nuevas = [];
-    for (let i = 1; i <= tamano; i++) if (!L.seqs.has(i)) nuevas.push({ user_id: user.id, lote: k, seq: i, ext: L.ext, nombre: `${k}-${i}.${L.ext}`, url: `${L.base}/${k}-${i}.${L.ext}`, origen_archivo: 'completar' });
+    for (let i = 1; i <= tamano; i++) if (!L.seqs.has(i)) nuevas.push({ user_id: user.id, lote: k, seq: i, ext: L.ext, nombre: `${k}-${i}.${L.ext}`, url: `${L.base}/${k}-${i}.${L.ext}`, origen_archivo: 'completar', clasif_id: L.clasif_id });
     if (nuevas.length) { const { data: ins } = await admin.from('arkaphoto_cola').upsert(nuevas, { onConflict: 'user_id,lote,seq', ignoreDuplicates: true }).select('id'); encoladas += ins?.length || 0; }
     lotesHechos++;
   }

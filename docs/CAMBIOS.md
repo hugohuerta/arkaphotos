@@ -1,5 +1,6 @@
 # CAMBIOS · ARKAPHOTO
 
+- v0.15.0 — 2026-10-30 — Carga de URL: clasificación (Tipo/Subgrupo/Detalle) elegida al encolar; se aplica al lote cuando baja su primera foto y las fotos la heredan; Completar lotes la conserva (mig 13)
 - v0.14.0 — 2026-10-30 — Cola: "Completar lotes" sondea cada lote en la base de su propia URL (32→16→8→4→2) y encola las posiciones que falten, sin depender de la ruta pública configurada
 - v0.13.2 — 2026-10-30 — Histórico: filtro Todos / Incompletos / Completos / Sin clasificar / Sin sondear; "Seleccionar visibles" actúa sobre lo filtrado
 - v0.13.1 — 2026-10-30 — fix: "Sesión inválida" en traer/sondear/cola tras 1 h (token caducado); ahora cada llamada usa el token renovado

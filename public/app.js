@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-const CFG = { VERSION: '0.14.0', MIGRACION_ESPERADA: 12, URL_TTL: 3600 };
+const CFG = { VERSION: '0.15.0', MIGRACION_ESPERADA: 13, URL_TTL: 3600 };
 const $ = id => document.getElementById(id);
 const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
 const MAX = 32, BUCKET = 'arkaphoto';
@@ -121,7 +121,7 @@ async function cargarClasif(){
   const { data, error } = await sb.from('arkaphoto_clasif').select('id,parent_id,nivel,nombre,orden').order('nivel').order('orden').order('nombre');
   if(error){ toast('Error leyendo clasificación: '+error.message); return; }
   clasif.clear(); (data||[]).forEach(c=>clasif.set(c.id,c));
-  cascCarga.pinta(); cascMasivo.pinta();
+  cascCarga.pinta(); cascMasivo.pinta(); cascUrls.pinta();
   const sel=$('fTipo'); sel.innerHTML='<option value="">Todos los tipos</option>'+hijos(null).map(t=>`<option value="${t.id}">${esc(t.nombre)}</option>`).join(''); sel.value=fil.tipo;
 }
 async function cargarLotesMeta(){
@@ -140,7 +140,7 @@ function cascada(idT, idS, idD){
   T.addEventListener('change',()=>{ S.value=''; D.value=''; pinta(); }); S.addEventListener('change',()=>{ D.value=''; pinta(); });
   return { pinta, valor:()=>Number(D.value||S.value||T.value)||null, reset:()=>{ T.value=''; S.value=''; D.value=''; pinta(); } };
 }
-const cascCarga = cascada('cTipo','cSub','cDet'), cascMasivo = cascada('mTipo','mSub','mDet');
+const cascCarga = cascada('cTipo','cSub','cDet'), cascMasivo = cascada('mTipo','mSub','mDet'), cascUrls = cascada('uTipo','uSub','uDet');
 async function clasificarLotes(keys, clasif_id){
   let n=0;
   for(const key of keys){
@@ -697,7 +697,7 @@ $('btnAnalizar').addEventListener('click', async ()=>{
 $('btnEncolar').addEventListener('click', async ()=>{
   $('btnEncolar').disabled=true; let n=0;
   for(let i=0;i<urlsNuevas.length;i+=500){
-    const tanda=urlsNuevas.slice(i,i+500).map(x=>({ ...x, user_id:session.user.id, origen_archivo:archivoNombre||null }));
+    const tanda=urlsNuevas.slice(i,i+500).map(x=>({ ...x, user_id:session.user.id, origen_archivo:archivoNombre||null, clasif_id:cascUrls.valor() }));
     const { error } = await sb.from('arkaphoto_cola').upsert(tanda, { onConflict:'user_id,lote,seq', ignoreDuplicates:true });
     if(error){ toast('Encolar: '+error.message); break; }
     n+=tanda.length; $('urlsResumen').textContent=`Encolando… ${n} de ${urlsNuevas.length}`;

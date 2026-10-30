@@ -1,4 +1,4 @@
-<!-- ARKAPHOTO v0.14.0 -->
+<!-- ARKAPHOTO v0.15.0 -->
 <!doctype html>
 <html lang="es">
 <head>
@@ -409,6 +409,12 @@ section.panel.col .cover{display:block}
       <p class="note" style="margin-bottom:8px">Pega URLs (una por línea) o sube un archivo <b>.txt</b> / <b>.json</b>: se extraen todas las URLs de fotos que contenga. Las envueltas en un proxy de redimensión (resizeapi) se desenvuelven para traer el original. Antes de descargar se revisa lo que ya existe o ya está en la cola.</p>
       <div class="row" style="margin-bottom:8px"><label class="btnlink" for="urlsFile">📄 Subir archivo .txt / .json</label><input type="file" id="urlsFile" accept=".txt,.json,text/plain,application/json" style="display:none"><span class="note" id="urlsFileN"></span></div>
       <textarea id="urlsTxt" placeholder="https://r2-us-west.photoai.com/1790023723-97bc931c14c0c7ef41258f2206c04e91-16.png"></textarea>
+      <div class="lote-ed" style="margin-top:10px">
+        <label class="f">Tipo<select id="uTipo"><option value="">—</option></select></label>
+        <label class="f">Subgrupo<select id="uSub"><option value="">—</option></select></label>
+        <label class="f">Detalle<select id="uDet"><option value="">—</option></select></label>
+        <div class="full" style="align-items:center"><span class="note">Clasificación que recibirán los lotes al traerse (opcional; se aplica cuando baja la primera foto del lote).</span></div>
+      </div>
       <div class="row" style="margin-top:10px"><button class="primary" id="btnAnalizar">Analizar</button><button id="btnEncolar" disabled>Encolar nuevas</button><span class="note" id="urlsResumen"></span></div>
     </div>
     <div class="panel" id="urlsStats" hidden style="margin-top:18px">
