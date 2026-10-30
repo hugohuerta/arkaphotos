@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-const CFG = { VERSION: '0.22.0', MIGRACION_ESPERADA: 14, URL_TTL: 3600 };
+const CFG = { VERSION: '0.23.0', MIGRACION_ESPERADA: 14, URL_TTL: 3600 };
 const $ = id => document.getElementById(id);
 const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
 const MAX = 32, BUCKET = 'arkaphoto';
@@ -631,6 +631,20 @@ function render(){
   let keys = hist ? [...lotes.keys()] : [...sesionLotes].filter(k=>lotes.has(k));
   if(hist && histFiltro!=='todos') keys = keys.filter(k=>{ const L=lotes.get(k), meta=lotesMeta.get(k)||{}; const f=faltantes(L,k).length;
     return histFiltro==='incompletos' ? f>0 : histFiltro==='completos' ? f===0 : histFiltro==='sinclasif' ? !meta.clasif_id : histFiltro==='sinsondear' ? !meta.sondeado_en : true; });
+  if(hist){
+    const tam=Number($('histTam').value)||0, fot=$('histFotos').value, falt=Number($('histFalt').value)||0;
+    const [fMin,fMax]=fot?fot.split('-').map(Number):[0,0];
+    keys = keys.filter(k=>{ const L=lotes.get(k); const n=L.items.size, f=faltantes(L,k).length, t=rangoEsperado(L,k);
+      if(tam && t!==tam) return false;
+      if(fot && (n<fMin || n>(fMax||fMin))) return false;
+      if(falt && f<falt) return false;
+      return true; });
+    const o=$('histOrden').value, ts=k=>Number(k.split('-')[0]);
+    const cmp={ carga_desc:(a,b)=>lotes.get(b).cargaEn-lotes.get(a).cargaEn, carga_asc:(a,b)=>lotes.get(a).cargaEn-lotes.get(b).cargaEn, lote_desc:(a,b)=>ts(b)-ts(a), lote_asc:(a,b)=>ts(a)-ts(b),
+      falt_desc:(a,b)=>faltantes(lotes.get(b),b).length-faltantes(lotes.get(a),a).length, fotos_desc:(a,b)=>lotes.get(b).items.size-lotes.get(a).items.size, fotos_asc:(a,b)=>lotes.get(a).items.size-lotes.get(b).items.size }[o];
+    if(cmp) keys.sort((a,b)=>cmp(a,b)||ts(b)-ts(a));
+    $('histN').textContent=`${keys.length} de ${lotes.size} lotes`;
+  }
   const histTotal = lotes.size;
   const nArch=keys.reduce((a,k)=>a+lotes.get(k).items.size,0);
   $('resumen').hidden = hist || (nArch===0 && bad.length===0);
@@ -713,6 +727,7 @@ $('btnNuevaCarga').addEventListener('click', async ()=>{
   $('cListo').hidden=true; $('upStatus').textContent='Listo para una nueva carga.';
   await cargarTodo(); render(); window.scrollTo({top:0,behavior:'smooth'});
 });
+['histOrden','histTam','histFotos'].forEach(id=>$(id).addEventListener('change',render)); $('histFalt').addEventListener('input',render);
 $('histFiltro').addEventListener('click', e=>{ const b=e.target.closest('button[data-f]'); if(!b) return; histFiltro=b.dataset.f; render(); });
 $('btnSelTodos').addEventListener('click', ()=>{ const visibles=[...document.querySelectorAll('#histLotes input.selh')].map(c=>c.dataset.lote); const quitar=visibles.length && visibles.every(k=>selHist.has(k)); visibles.forEach(k=>quitar?selHist.delete(k):selHist.add(k)); render(); });
 $('btnMasivo').addEventListener('click', ()=>{ if(!selHist.size){ toast('Selecciona al menos un lote'); return; } $('masivo').hidden=false; });

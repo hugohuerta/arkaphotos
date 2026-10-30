@@ -1,5 +1,6 @@
 # CAMBIOS · ARKAPHOTO
 
+- v0.23.0 — 2026-10-30 — Histórico: orden (fecha de carga/lote, faltantes, fotos), filtros por tamaño de lote, fotos en lote y faltantes mínimos; contador "N de M lotes"
 - v0.22.0 — 2026-10-30 — preferencia PNG > JPG en todo acceso al origen; `api/mejorar.js` reemplaza JPG subidas por su PNG del origen (automático tras subir, manual desde Histórico); botón Validar por lote en Histórico (resondeo forzado + faltantes + PNG disponibles); Validar seleccionados fuerza el resondeo; sondeo en tandas de 32 (antes el servidor recortaba en silencio)
 - v0.21.0 — 2026-10-30 — extensión mixta por lote: ante 404 se prueba .jpg↔.png en TRAER, cola, sondeo, analizar y completar (`api/_origen.js` compartido); si responde, se resondea el tamaño del lote con ambas extensiones y se encola lo nuevo; 404 con ambas = "no existe", sin reintentos
 - v0.20.1 — 2026-10-30 — TRAER: los 404 se reportan aparte como "no existen en la ruta", agrupados por lote, con explicación de que no se recuperan desde la web (solo por carga local)

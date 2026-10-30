@@ -1,4 +1,4 @@
-<!-- ARKAPHOTO v0.22.0 -->
+<!-- ARKAPHOTO v0.23.0 -->
 <!doctype html>
 <html lang="es">
 <head>
@@ -388,6 +388,13 @@ td.cl{white-space:nowrap}
       <div class="panel" style="margin-bottom:14px">
         <div class="row" style="justify-content:space-between">
           <div class="row"><div class="seg" id="histFiltro"><button class="on" data-f="todos">Todos</button><button data-f="incompletos">Incompletos</button><button data-f="completos">Completos</button><button data-f="sinclasif">Sin clasificar</button><button data-f="sinsondear">Sin sondear</button></div><button id="btnSelTodos">Seleccionar visibles</button><span class="note" id="selN">0 seleccionados</span></div>
+          <div class="row" style="margin-top:8px">
+            <label class="f">Orden<select id="histOrden" style="width:auto"><option value="carga_desc">Fecha de carga ↓</option><option value="carga_asc">Fecha de carga ↑</option><option value="lote_desc">Fecha de lote ↓</option><option value="lote_asc">Fecha de lote ↑</option><option value="falt_desc">Más faltantes</option><option value="fotos_desc">Más fotos</option><option value="fotos_asc">Menos fotos</option></select></label>
+            <label class="f">Tamaño de lote<select id="histTam" style="width:auto"><option value="">Cualquiera</option><option value="32">32</option><option value="16">16</option><option value="8">8</option><option value="4">4</option><option value="2">2</option><option value="1">1</option></select></label>
+            <label class="f">Fotos en lote<select id="histFotos" style="width:auto"><option value="">Cualquiera</option><option value="32">32</option><option value="16-31">16–31</option><option value="8-15">8–15</option><option value="4-7">4–7</option><option value="1-3">1–3</option></select></label>
+            <label class="f">Faltan al menos<input type="text" id="histFalt" inputmode="numeric" placeholder="0" style="width:70px"></label>
+            <span class="note" id="histN"></span>
+          </div>
           <div class="row"><button id="btnSondearSel" title="Vuelve a determinar el tamaño del lote en la ruta pública">Sondear tamaño</button><button id="btnValidarSel" title="Con selección: resondea 32/16/8/4/2 con ambas extensiones y lista faltantes">Validar faltantes</button><button class="primary" id="btnMasivo">Clasificar seleccionados</button></div>
         </div>
         <div id="masivo" hidden class="lote-ed" style="margin-top:12px">
