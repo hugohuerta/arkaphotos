@@ -12,8 +12,10 @@ export default async function handler(req, res) {
   const NO_REG = { error: 'Ese correo no está registrado en este portal' };
   if (!emailPermitido(email)) return res.status(404).json(NO_REG);
 
+  let etapa = 'config';
   try {
     const sb = admin();
+    etapa = 'supabase:listUsers';
     const { data: lista, error: lerr } = await sb.auth.admin.listUsers({ page: 1, perPage: 1000 });
     if (lerr) throw new Error(lerr.message);
     if (!lista.users.some(u => (u.email || '').toLowerCase() === email)) return res.status(404).json(NO_REG);
@@ -23,16 +25,19 @@ export default async function handler(req, res) {
       if (espera > 0) return res.status(429).json({ error: `Espera ${Math.ceil(espera)} s para pedir otro código`, retry: Math.ceil(espera) });
     }
     const code = generarCodigo();
+    etapa = 'supabase:otp';
     const { error } = await sb.from('arkaphoto_otp').upsert({
       email, code_hash: hashCodigo(email, code),
       expires_at: new Date(Date.now() + CODE_TTL_MIN * 60000).toISOString(),
       attempts: 0, sent_at: new Date().toISOString()
     });
     if (error) throw new Error(error.message);
+    etapa = 'resend';
     await enviarResend({ to: email, code });
     res.status(200).json({ ok: true, ttl: CODE_TTL_MIN, cooldown: RESEND_COOLDOWN_S });
   } catch (e) {
-    console.error('auth/send', e);
-    res.status(500).json({ error: 'No se pudo enviar el código' });
+    console.error('auth/send', etapa, e);
+    // Detalle sin secretos: etapa + mensaje del proveedor, para diagnosticar desde el login
+    res.status(500).json({ error: `No se pudo enviar el código (${etapa}: ${String(e.message || e).slice(0, 160)})` });
   }
 }

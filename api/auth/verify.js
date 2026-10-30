@@ -28,6 +28,6 @@ export default async function handler(req, res) {
     res.status(200).json({ ok: true, token_hash: link.data.properties.hashed_token });
   } catch (e) {
     console.error('auth/verify', e);
-    res.status(500).json({ error: 'No se pudo validar el código' });
+    res.status(500).json({ error: `No se pudo validar el código (${String(e.message || e).slice(0, 160)})` });
   }
 }
