@@ -1,5 +1,6 @@
 # CAMBIOS · ARKAPHOTO
 
+- v0.10.1 — 2026-10-29 — Cargar: la clasificación va después de la carga, con casillas por lote (preseleccionados los recién subidos) y "Aplicar a los seleccionados"
 - v0.10.0 — 2026-10-29 — Carga fotos en pestañas: Cargar (solo lo subido en la sesión, con clasificación opcional Tipo/Subgrupo/Detalle aplicada a los lotes nuevos) e Histórico (todos los lotes, selección múltiple, Clasificar seleccionados, Validar faltantes)
 - v0.9.0 — 2026-10-29 — Inicio: tabla "Últimos lotes" ordenada por fecha (timestamp de la clave) con filtros desde/hasta, subgrupo y búsqueda
 - v0.8.2 — 2026-10-29 — botones 💾 guardar y 🔍 abrir en pestaña sobre cada foto (esquinas inferiores); el clic al centro sigue abriendo el pase

@@ -1,4 +1,4 @@
-<!-- ARKAPHOTO v0.10.0 -->
+<!-- ARKAPHOTO v0.10.1 -->
 <!doctype html>
 <html lang="es">
 <head>
@@ -323,15 +323,6 @@ section.panel.col .cover{display:block}
     <div class="seg" id="cargaTabs" style="margin-bottom:16px"><button class="on" data-t="cargar">Cargar</button><button data-t="hist">Histórico</button></div>
 
     <div data-ctab="cargar">
-      <div class="panel" style="margin-bottom:14px">
-        <h2>Clasificación para esta carga (opcional)</h2>
-        <div class="fila" style="display:flex;flex-wrap:wrap;gap:10px">
-          <label class="f">Tipo<select id="cTipo" style="width:auto;min-width:160px"><option value="">—</option></select></label>
-          <label class="f">Subgrupo<select id="cSub" style="width:auto;min-width:160px"><option value="">—</option></select></label>
-          <label class="f">Detalle<select id="cDet" style="width:auto;min-width:160px"><option value="">—</option></select></label>
-        </div>
-        <p class="note" style="margin-top:6px">Se aplica a los lotes que subas ahora; cada foto hereda la clasificación del lote.</p>
-      </div>
       <label class="drop" id="drop" tabindex="0">
         <input type="file" id="files" multiple accept=".jpg,.jpeg,.png,image/jpeg,image/png">
         <strong>Arrastra aquí o haz clic para elegir</strong><br>
@@ -348,6 +339,16 @@ section.panel.col .cover{display:block}
         </div>
       </section>
       <section class="panel" id="lotes" hidden style="margin-top:18px"></section>
+      <section class="panel" id="cClasif" hidden style="margin-top:18px">
+        <div class="row" style="justify-content:space-between;margin-bottom:8px"><h2 style="margin:0">Clasificar lo subido</h2><span class="note" id="cSelN"></span></div>
+        <p class="note" style="margin-bottom:10px">Marca los lotes de arriba a los que aplique y elige Tipo, Subgrupo y/o Detalle (no hacen falta los tres). Cada foto hereda la clasificación de su lote.</p>
+        <div class="lote-ed" style="margin-top:0">
+          <label class="f">Tipo<select id="cTipo"><option value="">—</option></select></label>
+          <label class="f">Subgrupo<select id="cSub"><option value="">—</option></select></label>
+          <label class="f">Detalle<select id="cDet"><option value="">—</option></select></label>
+          <div class="full"><button class="primary" id="btnCargaOk">Aplicar a los seleccionados</button></div>
+        </div>
+      </section>
     </div>
 
     <div data-ctab="hist" hidden>
