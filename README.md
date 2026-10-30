@@ -16,6 +16,7 @@ api/traer.js             jala faltantes de la ruta pública → bucket (usa serv
 supabase/01_inicial.sql  tablas, RLS, bucket y políticas de Storage
 supabase/02_otp.sql      tabla de códigos de acceso
 supabase/03_seguridad.sql bucket privado + arkaphoto_migraciones
+supabase/04_grants.sql    grants explícitos (obligatorios en este proyecto)
 public/app.js            JS de la app (separado del HTML por la CSP)
 api/version.js           { app, version, migracion_esperada, migracion_aplicada }
 vercel.json              cabeceras de seguridad (CSP, HSTS, no-referrer)
@@ -23,7 +24,7 @@ vercel.json              cabeceras de seguridad (CSP, HSTS, no-referrer)
 
 ## 1. Supabase
 
-1. Crear proyecto. SQL Editor → ejecutar `supabase/01_inicial.sql`, `02_otp.sql` y `03_seguridad.sql` en orden.
+1. Crear proyecto. SQL Editor → ejecutar `supabase/01_inicial.sql`, `02_otp.sql`, `03_seguridad.sql` y `04_grants.sql` en orden.
 2. **Authentication → Providers → Email**: dejar habilitado (la sesión se abre con un enlace mágico generado en servidor; el correo lo manda Resend, no Supabase).
 3. Copiar de **Project Settings → API**: Project URL, anon key, service_role key.
 
