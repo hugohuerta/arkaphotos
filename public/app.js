@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-const CFG = { VERSION: '0.4.0', MIGRACION_ESPERADA: 5, URL_TTL: 3600 };
+const CFG = { VERSION: '0.5.0', MIGRACION_ESPERADA: 6, URL_TTL: 3600 };
 const $ = id => document.getElementById(id);
 const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
 const MAX = 32, BUCKET = 'arkaphoto';
@@ -22,7 +22,10 @@ let session = null;
 const cfg = { base:'', rango:'16', tarifa:0.021, gbInc:1 };
 const lotes = new Map();   // key -> {ts,hash,ext,items:Map(seq->{id,url,origen,bytes,favorita,ruta})}
 const raw = new Map();     // archivos locales pendientes de subir (nombre -> File)
-const bad = []; let dupes = [], lastMissing = [], galFiltro = 'todos';
+const bad = []; let dupes = [], lastMissing = [], galFiltro = 'todos', galTipo = '';
+const clasif = new Map();  // id -> {id,parent_id,nivel,nombre,orden}
+const lotesMeta = new Map(); // lote -> {nombre,clasif_id,notas}
+let clSel = { 1:null, 2:null };  // selección en el árbol de Admin
 
 // ---------- rutas / vistas
 function show(v){ ['vLogin','vApp'].forEach(id=>$(id).hidden = id!==v); }
@@ -39,7 +42,7 @@ async function route(){
   if(v==='inicio') renderInicio();
   if(v==='galerias') renderGalerias();
   if(v==='carga') render();
-  if(v==='admin') { await renderMigraciones(); }
+  if(v==='admin') { renderArbol(); await renderMigraciones(); }
 }
 window.addEventListener('hashchange', route);
 sb.auth.onAuthStateChange((ev)=>{ if(ev==='SIGNED_OUT') show('vLogin'); });
@@ -88,7 +91,30 @@ async function cargarTodo(){
   cfg.base = (c?.ruta_publica||'').replace(/\/+$/,''); cfg.rango = c?.rango||'16';
   cfg.tarifa = Number(c?.tarifa_gb_usd ?? 0.021); cfg.gbInc = Number(c?.gb_incluidos ?? 1);
   $('baseUrl').value = cfg.base; $('rango').value = cfg.rango; $('tarifa').value = cfg.tarifa; $('gbInc').value = cfg.gbInc;
-  await cargarImagenes();
+  await Promise.all([cargarClasif(), cargarLotesMeta(), cargarImagenes()]);
+}
+async function cargarClasif(){
+  const { data, error } = await sb.from('arkaphoto_clasif').select('id,parent_id,nivel,nombre,orden').order('nivel').order('orden').order('nombre');
+  if(error){ toast('Error leyendo clasificación: '+error.message); return; }
+  clasif.clear(); (data||[]).forEach(c=>clasif.set(c.id,c));
+  const sel=$('galTipo'); const cur=sel.value; sel.innerHTML='<option value="">Todos los tipos</option>'+hijos(null).map(t=>`<option value="${t.id}">${esc(t.nombre)}</option>`).join(''); sel.value=cur;
+}
+async function cargarLotesMeta(){
+  const { data, error } = await sb.from('arkaphoto_lotes').select('lote,nombre,clasif_id,notas');
+  if(error){ toast('Error leyendo lotes: '+error.message); return; }
+  lotesMeta.clear(); (data||[]).forEach(m=>lotesMeta.set(m.lote,m));
+}
+const hijos = pid => [...clasif.values()].filter(c=>(c.parent_id??null)===(pid??null)).sort((a,b)=>a.orden-b.orden||a.nombre.localeCompare(b.nombre));
+function rutaClasif(id){ const out=[]; let c=clasif.get(id); while(c){ out.unshift(c); c=clasif.get(c.parent_id); } return out; }
+const tipoDe = id => rutaClasif(id)[0]?.id ?? null;
+
+// Etiqueta visible: LOTE <ts> (con -A/-B si el timestamp se repite); con nombre: NOMBRE <ts>-A
+function etiqueta(key){
+  const ts=key.split('-')[0];
+  const iguales=[...lotes.keys()].filter(k=>k.split('-')[0]===ts).sort();
+  const letra = iguales.length>1 ? '-'+String.fromCharCode(65+iguales.indexOf(key)) : '';
+  const nom=(lotesMeta.get(key)?.nombre||'').trim();
+  return (nom?nom.toUpperCase():'LOTE')+' '+ts+letra;
 }
 async function firmar(rutas){
   if(!rutas.length) return new Map();
@@ -131,7 +157,8 @@ function renderInicio(){
   const rows=[];
   for(const [key,L] of lotes){
     const r=resumenLote(L); fotos+=r.n; bytes+=r.bytes; fav+=r.fav; traidas+=r.traidas; if(!r.faltan) completos++;
-    rows.push(`<tr><td class="k"><a href="#galerias">${esc(key)}</a></td><td>${r.n-r.traidas}</td><td>${r.traidas}</td><td>${r.faltan}</td><td>${fmt(r.bytes)}</td><td><span class="pill ${r.faltan?'miss':'ok'}">${r.faltan?'faltan '+r.faltan:'completo'}</span></td></tr>`);
+    const ruta=rutaClasif(lotesMeta.get(key)?.clasif_id).map(c=>esc(c.nombre)).join(' › ');
+    rows.push(`<tr><td><a href="#galerias" class="etq" style="font-size:.9rem">${esc(etiqueta(key))}</a><div class="key" style="font-size:.7rem;color:var(--muted)">${esc(key)}</div></td><td class="ruta">${ruta||'<span class="pill warn">sin clasificar</span>'}</td><td>${r.n-r.traidas}</td><td>${r.traidas}</td><td>${r.faltan}</td><td>${fmt(r.bytes)}</td><td><span class="pill ${r.faltan?'miss':'ok'}">${r.faltan?'faltan '+r.faltan:'completo'}</span></td></tr>`);
   }
   $('dFotos').textContent=fotos; $('dFotosSub').textContent=`${lotes.size} lotes · ${traidas} traídas`;
   $('dEspacio').textContent=fmt(bytes); $('dEspacioSub').textContent=`${(bytes/1073741824).toFixed(3)} GB en el bucket`;
@@ -139,16 +166,20 @@ function renderInicio(){
   $('dCosto').textContent = cfg.tarifa ? `US$${costo.toFixed(costo<1?3:2)}` : '—';
   $('dCostoSub').textContent = cfg.tarifa ? `${cobrable.toFixed(3)} GB sobre ${cfg.gbInc} GB incluidos × US$${cfg.tarifa}/GB` : 'configura la tarifa en Admin';
   $('dFav').textContent=fav; $('dFavSub').textContent=`${completos} de ${lotes.size} lotes completos`;
-  $('dLotes').innerHTML = rows.join('') || '<tr><td colspan="6" class="note">Aún no hay lotes. Sube fotos en "Carga fotos".</td></tr>';
+  $('dLotes').innerHTML = rows.join('') || '<tr><td colspan="7" class="note">Aún no hay lotes. Sube fotos en "Carga fotos".</td></tr>';
 }
 
 // ---------- GALERÍAS
 $('galFiltro').addEventListener('click', e=>{ const b=e.target.closest('button'); if(!b) return; galFiltro=b.dataset.f; document.querySelectorAll('#galFiltro button').forEach(x=>x.classList.toggle('on',x===b)); renderGalerias(); });
+$('galTipo').addEventListener('change', e=>{ galTipo=e.target.value; renderGalerias(); });
 function renderGalerias(){
   let total=0, fav=0; const parts=[];
   for(const [key,L] of lotes){
     const r=resumenLote(L); total+=r.n; fav+=r.fav;
+    const meta=lotesMeta.get(key)||{};
     if(galFiltro==='incompletos' && !r.faltan) continue;
+    if(galFiltro==='sinclasif' && meta.clasif_id) continue;
+    if(galTipo && String(tipoDe(meta.clasif_id))!==galTipo) continue;
     const cards=[];
     for(let i=1;i<=r.hasta;i++){
       const it=L.items.get(i);
@@ -158,12 +189,44 @@ function renderGalerias(){
       } else if(galFiltro!=='fav') cards.push(`<figure class="gc"><div class="cell miss" style="aspect-ratio:1;border:0;border-radius:0">${i}</div><figcaption><b>${i}</b><span class="pill miss">falta</span></figcaption></figure>`);
     }
     if(!cards.length) continue;
-    parts.push(`<section class="panel" style="margin-bottom:16px"><h2 class="key" style="text-transform:none;letter-spacing:0">${esc(key)} · ${r.n} de ${r.hasta}${r.fav?' · ★ '+r.fav:''}</h2><div class="gal">${cards.join('')}</div></section>`);
+    const ruta=rutaClasif(meta.clasif_id).map(c=>esc(c.nombre)).join(' › ');
+    parts.push(`<section class="panel" style="margin-bottom:16px" data-lote="${esc(key)}">
+      <div class="row" style="justify-content:space-between;margin-bottom:8px">
+        <div><div class="etq">${esc(etiqueta(key))}<small>${esc(key)}</small></div>
+          <div class="ruta">${ruta?ruta:'<span class="pill warn">sin clasificar</span>'} · ${r.n} de ${r.hasta}${r.fav?' · ★ '+r.fav:''}</div></div>
+        <button class="quiet ed" data-lote="${esc(key)}">Editar</button>
+      </div>
+      <div class="gal">${cards.join('')}</div></section>`);
   }
   $('galBody').innerHTML = parts.join('') || '<p class="note">Nada que mostrar con este filtro.</p>';
   $('galStats').textContent = `${total} imágenes · ${fav} favoritas · ${lotes.size} lotes`;
 }
+function selectOpts(list, cur, vacio){ return `<option value="">${vacio}</option>`+list.map(c=>`<option value="${c.id}" ${c.id===cur?'selected':''}>${esc(c.nombre)}</option>`).join(''); }
+function abrirEditor(sec, key){
+  if(sec.querySelector('.lote-ed')) { sec.querySelector('.lote-ed').remove(); return; }
+  const meta=lotesMeta.get(key)||{}; const ruta=rutaClasif(meta.clasif_id); const [n1,n2,n3]=[ruta[0]?.id,ruta[1]?.id,ruta[2]?.id];
+  const f=document.createElement('form'); f.className='lote-ed';
+  f.innerHTML=`<label class="f">Nombre<input type="text" name="nombre" maxlength="60" value="${esc(meta.nombre||'')}" placeholder="p. ej. Fernanda"></label>
+    <label class="f">Tipo<select name="n1">${selectOpts(hijos(null),n1,'—')}</select></label>
+    <label class="f">Subgrupo<select name="n2">${selectOpts(n1?hijos(n1):[],n2,'—')}</select></label>
+    <label class="f">Detalle<select name="n3">${selectOpts(n2?hijos(n2):[],n3,'—')}</select></label>
+    <label class="f full" style="display:grid">Notas<input type="text" name="notas" value="${esc(meta.notas||'')}"></label>
+    <div class="full"><button class="primary" type="submit">Guardar</button><button type="button" class="cancel">Cancelar</button></div>`;
+  f.n1.addEventListener('change',()=>{ f.n2.innerHTML=selectOpts(f.n1.value?hijos(Number(f.n1.value)):[],null,'—'); f.n3.innerHTML=selectOpts([],null,'—'); });
+  f.n2.addEventListener('change',()=>{ f.n3.innerHTML=selectOpts(f.n2.value?hijos(Number(f.n2.value)):[],null,'—'); });
+  f.querySelector('.cancel').addEventListener('click',()=>f.remove());
+  f.addEventListener('submit', async ev=>{
+    ev.preventDefault();
+    const clasif_id = Number(f.n3.value||f.n2.value||f.n1.value)||null;
+    const row={ user_id:session.user.id, lote:key, nombre:f.nombre.value.trim()||null, clasif_id, notas:f.notas.value.trim()||null, actualizado:new Date().toISOString() };
+    const { error } = await sb.from('arkaphoto_lotes').upsert(row);
+    if(error){ toast('No se guardó: '+error.message); return; }
+    lotesMeta.set(key,row); toast('Galería guardada'); renderGalerias();
+  });
+  sec.querySelector('.row').after(f); f.nombre.focus();
+}
 $('galBody').addEventListener('click', async e=>{
+  const ed=e.target.closest('button.ed'); if(ed){ abrirEditor(ed.closest('section'), ed.dataset.lote); return; }
   const b=e.target.closest('button.fav'); if(!b) return;
   const id=Number(b.dataset.id); let it; for(const L of lotes.values()) for(const x of L.items.values()) if(x.id===id) it=x;
   if(!it) return;
@@ -241,7 +304,7 @@ function render(){
     const miss=faltantes(L), hasta=rangoEsperado(L); total+=miss.length;
     miss.forEach(n=>lastMissing.push({key,L,n}));
     const d=document.createElement('div'); d.className='lote';
-    d.innerHTML = `<div class="lote-head"><span class="key">${esc(key)}</span><span class="pill ${miss.length?'miss':'ok'}">${miss.length?miss.length+' faltantes':'completo'}</span><span class="pill warn">${L.items.size} de ${hasta}</span></div>`;
+    d.innerHTML = `<div class="lote-head"><span class="etq" style="font-size:.9rem">${esc(etiqueta(key))}</span><span class="key" style="color:var(--muted)">${esc(key)}</span><span class="pill ${miss.length?'miss':'ok'}">${miss.length?miss.length+' faltantes':'completo'}</span><span class="pill warn">${L.items.size} de ${hasta}</span></div>`;
     const g=document.createElement('div'); g.className='seq';
     for(let i=1;i<=MAX;i++){
       const c=document.createElement('div'); c.className='cell'; c.dataset.n=i;
@@ -333,7 +396,46 @@ $('btnTraerUrls').addEventListener('click', async ()=>{
   await cargarImagenes(); urlsNuevas=[];
 });
 
-// ---------- ADMIN
+// ---------- ADMIN · clasificación
+function renderArbol(){
+  const pinta=(nivel, pid, sel)=>{
+    const ul=$('cl'+nivel); ul.innerHTML = hijos(pid).map(c=>`<li class="${sel===c.id?'on':''}" data-id="${c.id}"><button class="item" type="button">${esc(c.nombre)}</button><button class="ico ren" type="button" title="Renombrar">✎</button><button class="ico del" type="button" title="Borrar">✕</button></li>`).join('') || '<li class="note" style="padding:6px 8px">Vacío</li>';
+  };
+  pinta(1,null,clSel[1]);
+  const f2=document.querySelector('#cl2').nextElementSibling, f3=document.querySelector('#cl3').nextElementSibling;
+  if(clSel[1]){ pinta(2,clSel[1],clSel[2]); f2.hidden=false; $('cl2note').hidden=true; } else { $('cl2').innerHTML=''; f2.hidden=true; $('cl2note').hidden=false; }
+  if(clSel[2]){ pinta(3,clSel[2],null); f3.hidden=false; $('cl3note').hidden=true; } else { $('cl3').innerHTML=''; f3.hidden=true; $('cl3note').hidden=false; }
+}
+document.querySelector('.cols3').addEventListener('click', async e=>{
+  const li=e.target.closest('li[data-id]'); if(!li) return;
+  const id=Number(li.dataset.id), c=clasif.get(id);
+  if(e.target.closest('.ren')){
+    const nuevo=prompt('Nuevo nombre', c.nombre); if(!nuevo||!nuevo.trim()||nuevo.trim()===c.nombre) return;
+    const { error } = await sb.from('arkaphoto_clasif').update({ nombre:nuevo.trim() }).eq('id',id);
+    if(error){ toast(error.code==='23505'?'Ya existe ese nombre en este nivel':error.message); return; }
+    c.nombre=nuevo.trim(); renderArbol(); await cargarClasif(); return;
+  }
+  if(e.target.closest('.del')){
+    if(hijos(id).length){ toast('Primero borra sus elementos hijos'); return; }
+    const usados=[...lotesMeta.values()].filter(m=>m.clasif_id===id).length;
+    if(usados){ toast(`Lo usan ${usados} galería(s); reasígnalas primero`); return; }
+    if(!confirm(`¿Borrar "${c.nombre}"?`)) return;
+    const { error } = await sb.from('arkaphoto_clasif').delete().eq('id',id);
+    if(error){ toast(error.message); return; }
+    clasif.delete(id); if(clSel[1]===id) clSel={1:null,2:null}; if(clSel[2]===id) clSel[2]=null; renderArbol(); await cargarClasif(); return;
+  }
+  if(c.nivel===1){ clSel={1:id,2:null}; } else if(c.nivel===2){ clSel[2]=id; }
+  renderArbol();
+});
+document.querySelectorAll('.cols3 form').forEach(f=>f.addEventListener('submit', async e=>{
+  e.preventDefault(); const nivel=Number(f.dataset.nivel), inp=f.querySelector('input'), nombre=inp.value.trim(); if(!nombre) return;
+  const parent_id = nivel===1?null:nivel===2?clSel[1]:clSel[2]; if(nivel>1 && !parent_id) return;
+  const orden = hijos(parent_id).length+1;
+  const { data, error } = await sb.from('arkaphoto_clasif').insert({ user_id:session.user.id, parent_id, nivel, nombre, orden }).select().single();
+  if(error){ toast(error.code==='23505'?'Ya existe ese nombre en este nivel':error.message); return; }
+  clasif.set(data.id,data); inp.value=''; renderArbol(); await cargarClasif();
+}));
+
 async function renderMigraciones(){
   const { data, error } = await sb.from('arkaphoto_migraciones').select('num,nombre,version,aplicada_en').order('num');
   $('migBody').innerHTML = error ? `<tr><td colspan="4" class="err">${esc(error.message)}</td></tr>` :

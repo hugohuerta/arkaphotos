@@ -1,4 +1,4 @@
-<!-- ARKAPHOTO v0.4.0 -->
+<!-- ARKAPHOTO v0.5.0 -->
 <!doctype html>
 <html lang="es">
 <head>
@@ -132,6 +132,24 @@ textarea{font:inherit;font-family:var(--mono);font-size:.82rem;width:100%;min-he
 .seg{display:flex;gap:4px}
 .seg button{padding:6px 10px;font-size:.82rem}
 .seg button.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+/* clasificación (3 columnas) */
+.cols3{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.col{border:1px solid var(--line);border-radius:8px;padding:10px;display:grid;gap:6px;align-content:start;background:var(--bg)}
+.col h3{margin:0 0 4px;font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.col ul{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+.col li{display:flex;align-items:center;gap:6px}
+.col li button.item{flex:1;text-align:left;border-color:transparent;background:transparent;padding:6px 8px;font-size:.88rem}
+.col li.on button.item{background:var(--accent);color:var(--accent-ink)}
+.col li button.ico{padding:4px 7px;font-size:.78rem;border-color:transparent;background:transparent;color:var(--muted)}
+.col li:hover button.ico{color:var(--fg)}
+.col form{display:flex;gap:6px;margin-top:6px}
+.col form input{min-width:0}
+.lote-ed{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));align-items:end;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:8px}
+.lote-ed .full{grid-column:1/-1;display:flex;gap:8px}
+.etq{font-weight:600;font-size:1rem;letter-spacing:-.005em}
+.etq small{font-family:var(--mono);font-weight:400;color:var(--muted);font-size:.72rem;margin-left:8px;word-break:break-all}
+.ruta{font-size:.78rem;color:var(--muted)}
+.ruta b{color:var(--fg);font-weight:500}
 /* galería */
 .gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
 .gc{margin:0;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}
@@ -199,14 +217,15 @@ textarea{font:inherit;font-family:var(--mono);font-size:.82rem;width:100%;min-he
     </div>
     <div class="panel">
       <h2>Lotes</h2>
-      <div class="tw"><table class="t"><thead><tr><th>Lote</th><th>Cargadas</th><th>Traídas</th><th>Faltan</th><th>Espacio</th><th>Estado</th></tr></thead><tbody id="dLotes"></tbody></table></div>
+      <div class="tw"><table class="t"><thead><tr><th>Galería</th><th>Clasificación</th><th>Cargadas</th><th>Traídas</th><th>Faltan</th><th>Espacio</th><th>Estado</th></tr></thead><tbody id="dLotes"></tbody></table></div>
     </div>
   </section>
 
   <!-- GALERÍAS -->
   <section id="v-galerias" data-view hidden>
     <div class="row" style="justify-content:space-between;margin-bottom:14px">
-      <div class="seg" id="galFiltro"><button class="on" data-f="todos">Todos</button><button data-f="fav">Favoritas</button><button data-f="incompletos">Incompletos</button></div>
+      <div class="row"><div class="seg" id="galFiltro"><button class="on" data-f="todos">Todos</button><button data-f="fav">Favoritas</button><button data-f="incompletos">Incompletos</button><button data-f="sinclasif">Sin clasificar</button></div>
+      <select id="galTipo" style="width:auto"><option value="">Todos los tipos</option></select></div>
       <span class="note" id="galStats"></span>
     </div>
     <div id="galBody"></div>
@@ -287,6 +306,16 @@ textarea{font:inherit;font-family:var(--mono);font-size:.82rem;width:100%;min-he
         <button type="submit">Guardar</button>
       </form>
       <p class="note" style="margin-top:8px">La URL de cada faltante se arma como <span class="key">{ruta}/{archivo}</span>. Tarifa por default: Supabase Storage (US$0.021/GB-mes; Free incluye 1 GB, Pro 100 GB).</p>
+    </div>
+
+    <div class="panel" style="margin-top:18px">
+      <h2>Clasificación de galerías</h2>
+      <p class="note" style="margin-bottom:10px">Tres niveles: Tipo → Subgrupo → Detalle. Selecciona un elemento para ver y crear los del siguiente nivel. Un elemento con hijos o con galerías asignadas no se puede borrar.</p>
+      <div class="cols3">
+        <div class="col"><h3>1 · Tipo</h3><ul id="cl1"></ul><form data-nivel="1"><input type="text" placeholder="Nuevo tipo" maxlength="60"><button type="submit">+</button></form></div>
+        <div class="col"><h3>2 · Subgrupo</h3><ul id="cl2"></ul><form data-nivel="2" hidden><input type="text" placeholder="Nuevo subgrupo" maxlength="60"><button type="submit">+</button></form><p class="note" id="cl2note">Selecciona un tipo</p></div>
+        <div class="col"><h3>3 · Detalle</h3><ul id="cl3"></ul><form data-nivel="3" hidden><input type="text" placeholder="Nuevo detalle" maxlength="60"><button type="submit">+</button></form><p class="note" id="cl3note">Selecciona un subgrupo</p></div>
+      </div>
     </div>
 
     <div class="panel" style="margin-top:18px">
