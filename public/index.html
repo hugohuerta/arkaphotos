@@ -1,4 +1,4 @@
-<!-- ARKAPHOTO v0.7.0 -->
+<!-- ARKAPHOTO v0.8.0 -->
 <!doctype html>
 <html lang="es">
 <head>
@@ -171,6 +171,32 @@ textarea{font:inherit;font-family:var(--mono);font-size:.82rem;width:100%;min-he
 .cnt.miss{background:var(--miss-bg);color:var(--miss)}
 .qtag{display:inline-flex;align-items:center}
 .qtag input{font:inherit;font-size:.85rem;padding:6px 10px;border:1px solid var(--accent);border-radius:6px;background:var(--bg);color:var(--fg);width:200px}
+/* vistas de galería */
+.gal.x2{grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.gc .ov{position:absolute;top:6px;right:6px;display:flex;gap:4px}
+.gc .ov button{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:3px 7px;cursor:pointer;color:var(--muted);font-size:1rem;line-height:1}
+.gc .ov button.on{color:#e0a500}
+.gc .ov button.hid.on{color:var(--miss)}
+.gc.oc img{opacity:.35;filter:grayscale(1)}
+.gc.portada{outline:2px solid var(--accent)}
+.gc .n{position:absolute;left:6px;bottom:6px;font-family:var(--mono);font-size:.7rem;background:var(--panel);padding:1px 6px;border-radius:4px;color:var(--fg)}
+.gc img{cursor:zoom-in}
+section.panel.col .gal{display:none}
+section.panel.col .cover{display:block}
+.cover{display:none;position:relative;max-width:260px}
+.cover img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;cursor:pointer}
+.cover .n{position:absolute;left:8px;bottom:8px;font-size:.78rem;background:var(--panel);padding:2px 8px;border-radius:4px}
+.tgl{font-size:.85rem;padding:4px 10px}
+/* pase (lightbox) */
+.lb{position:fixed;inset:0;background:rgba(10,10,12,.96);z-index:20;display:grid;grid-template-rows:auto 1fr auto;color:#ebe8e0}
+.lb header{display:flex;justify-content:space-between;align-items:center;padding:12px max(16px,env(safe-area-inset-left,0px));font-size:.9rem}
+.lb header b{font-family:var(--mono);font-weight:500}
+.lb .stage{position:relative;display:grid;place-items:center;min-height:0}
+.lb .stage img{max-width:100%;max-height:100%;object-fit:contain}
+.lb .arrow{position:absolute;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.1);border:0;color:#fff;font-size:2rem;width:56px;height:80px;border-radius:8px;cursor:pointer}
+.lb .arrow.l{left:12px}.lb .arrow.r{right:12px}
+.lb footer{display:flex;justify-content:center;gap:10px;padding:12px;font-size:.85rem}
+.lb button.x{background:none;border:1px solid #444;color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer}
 /* galería */
 .gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
 .gc{margin:0;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}
@@ -252,7 +278,10 @@ textarea{font:inherit;font-family:var(--mono);font-size:.82rem;width:100%;min-he
         <label class="f" style="flex:1 1 220px">Buscar<input type="search" id="fBuscar" placeholder="nombre, clave, clasificación, tag, notas"></label>
       </div>
       <div class="fila">
-        <div class="seg" id="galFiltro"><button class="on" data-f="todos">Todos</button><button data-f="fav">Favoritas</button><button data-f="incompletos">Incompletos</button><button data-f="sinclasif">Sin clasificar</button></div>
+        <div class="seg" id="galFiltro"><button class="on" data-f="todos">Todos</button><button data-f="fav">Favoritas</button><button data-f="incompletos">Incompletos</button><button data-f="sinclasif">Sin clasificar</button><button data-f="ocultas">Ocultas</button></div>
+        <div class="seg" id="galVista"><button class="on" data-v="1x">Cuadrícula</button><button data-v="2x">2X</button></div>
+        <button class="tgl" id="btnColapsar">Colapsar todo</button>
+        <button class="tgl" id="btnZipTodo">↓ Descargar visibles</button>
         <div class="tags" id="fTags"></div>
         <span class="note" id="galStats" style="margin-left:auto"></span>
       </div>
@@ -377,8 +406,14 @@ textarea{font:inherit;font-family:var(--mono);font-size:.82rem;width:100%;min-he
   </section>
 </div>
 
+<div class="lb" id="lb" hidden>
+  <header><span id="lbTitulo"></span><b id="lbPos"></b><button class="x" id="lbCerrar">Cerrar ✕</button></header>
+  <div class="stage"><button class="arrow l" id="lbPrev">‹</button><img id="lbImg" alt=""><button class="arrow r" id="lbNext">›</button></div>
+  <footer><span id="lbNombre" class="key"></span></footer>
+</div>
 <div class="toast" id="toast"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script type="module" src="app.js"></script>
 </body>
 </html>
