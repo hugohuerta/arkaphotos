@@ -1,5 +1,6 @@
 # CAMBIOS · ARKAPHOTO
 
+- v0.16.1 — 2026-10-30 — botón ⟷ Ancho en la barra: la página usa todo el ancho (galería con más columnas, grid de 32 por fila); se recuerda por navegador
 - v0.16.0 — 2026-10-30 — Carga de URL: "Analizar y encolar" agrupa por lote, sondea el tamaño en la base de cada URL, calcula fotos a traer (listadas + completadas) y encola por bloques automáticamente; tabla por lote; se retiran Encolar y Completar
 - v0.15.0 — 2026-10-30 — Carga de URL: clasificación (Tipo/Subgrupo/Detalle) elegida al encolar; se aplica al lote cuando baja su primera foto y las fotos la heredan; Completar lotes la conserva (mig 13)
 - v0.14.0 — 2026-10-30 — Cola: "Completar lotes" sondea cada lote en la base de su propia URL (32→16→8→4→2) y encola las posiciones que falten, sin depender de la ruta pública configurada

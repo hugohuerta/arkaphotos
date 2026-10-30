@@ -1,4 +1,4 @@
-<!-- ARKAPHOTO v0.16.0 -->
+<!-- ARKAPHOTO v0.16.1 -->
 <!doctype html>
 <html lang="es">
 <head>
@@ -22,6 +22,11 @@
 body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:15px;line-height:1.5;margin:0;
   padding-block:28px 60px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 .wrap{max-width:980px;margin:0 auto;display:grid;gap:22px}
+html.ancho .wrap{max-width:none}
+html.ancho .gal{grid-template-columns:repeat(auto-fill,minmax(190px,1fr))}
+html.ancho .gal.x2{grid-template-columns:repeat(auto-fill,minmax(340px,1fr))}
+html.ancho .seq{grid-template-columns:repeat(32,minmax(0,1fr))}
+@media (max-width:1400px){html.ancho .seq{grid-template-columns:repeat(16,minmax(0,1fr))}}
 h1{font-size:1.5rem;font-weight:600;margin:0;letter-spacing:-.01em;text-wrap:balance}
 h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 10px;font-weight:600}
 p{margin:0}
@@ -272,7 +277,7 @@ section.panel.col .cover{display:block}
       <a href="#urls" data-v="urls">Carga de URL</a>
       <a href="#admin" data-v="admin">Admin</a>
     </nav>
-    <div class="row"><span class="who" id="who"></span><span class="pill warn" id="verChip"></span><button class="quiet" id="btnSalir">Salir</button></div>
+    <div class="row"><span class="who" id="who"></span><span class="pill warn" id="verChip"></span><button class="quiet" id="btnAncho" title="Alternar ancho completo">⟷ Ancho</button><button class="quiet" id="btnSalir">Salir</button></div>
   </header>
 
   <!-- INICIO -->

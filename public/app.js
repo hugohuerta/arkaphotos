@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-const CFG = { VERSION: '0.16.0', MIGRACION_ESPERADA: 13, URL_TTL: 3600 };
+const CFG = { VERSION: '0.16.1', MIGRACION_ESPERADA: 13, URL_TTL: 3600 };
 const $ = id => document.getElementById(id);
 const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
 const MAX = 32, BUCKET = 'arkaphoto';
@@ -93,6 +93,10 @@ $('fCode').addEventListener('submit', async e=>{
   $('btnVerificar').disabled=false;
 });
 $('btnOtro').addEventListener('click', ()=>{ $('fCode').hidden=true; $('fEmail').hidden=false; $('errCode').textContent=''; });
+// Ancho completo (monitores grandes); se recuerda por navegador
+function aplicarAncho(on){ document.documentElement.classList.toggle('ancho', on); $('btnAncho').textContent = on ? '⟷ Normal' : '⟷ Ancho'; try{ localStorage.setItem('arkaphoto-ancho', on?'1':'0'); }catch{} }
+try{ aplicarAncho(localStorage.getItem('arkaphoto-ancho')==='1'); }catch{}
+$('btnAncho').addEventListener('click', ()=>aplicarAncho(!document.documentElement.classList.contains('ancho')));
 $('btnSalir').addEventListener('click', async ()=>{ await sb.auth.signOut(); lotes.clear(); show('vLogin'); });
 
 // ---------- datos
