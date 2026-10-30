@@ -1,5 +1,6 @@
 # CAMBIOS · ARKAPHOTO
 
+- v0.20.0 — 2026-10-30 — Carga de URL: clasificación por fila de lote (Tipo › Subgrupo) en la tabla de análisis; la global sigue como default al encolar
 - v0.19.0 — 2026-10-30 — ritmo de descarga configurable (paralelas, pausa entre fotos con jitter, tamaño de tanda, espera entre tandas; presets Suave/Normal/Rápido; default Suave); User-Agent de navegador; ante 429/403 del origen la cola se detiene y devuelve a pendientes (mig 14)
 - v0.18.1 — 2026-10-30 — Galerías: selector de orden (fecha de carga ↓/↑, fecha del lote ↓/↑, nombre); fecha de carga = última foto registrada del lote
 - v0.18.0 — 2026-10-30 — Inicio: tabla "Por tipo y subgrupo" (lotes, fotos, % y espacio, favoritas) con enlace a Galerías filtradas

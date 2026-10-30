@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-const CFG = { VERSION: '0.19.0', MIGRACION_ESPERADA: 14, URL_TTL: 3600 };
+const CFG = { VERSION: '0.20.0', MIGRACION_ESPERADA: 14, URL_TTL: 3600 };
 const $ = id => document.getElementById(id);
 const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
 const MAX = 32, BUCKET = 'arkaphoto';
@@ -743,6 +743,23 @@ $('urlsFile').addEventListener('change', async e=>{
   $('urlsTxt').value=urls.join('\n'); $('urlsFileN').textContent=`${f.name}: ${urls.length} URLs`; e.target.value='';
   $('btnAnalizar').click();
 });
+// Clasificación por fila de lote (2 niveles: Tipo › Subgrupo) en la tabla de URLs
+const urlClasif=new Map(); // lote -> clasif_id elegido en su fila
+function selsFila(lote, cid){
+  const ruta=rutaClasif(cid); const t=ruta[0]?.id||'', sg=ruta[1]?.id||'';
+  const opt=(list,v)=>`<option value="">—</option>`+list.map(c=>`<option value="${c.id}"${c.id===v?' selected':''}>${esc(c.nombre)}</option>`).join('');
+  return `<select data-lote="${esc(lote)}" data-n="1" title="Tipo">${opt(hijos(null),t)}</select> <select data-lote="${esc(lote)}" data-n="2" title="Subgrupo">${opt(t?hijos(Number(t)):[],sg)}</select>`;
+}
+$('urlsBody').addEventListener('change', async e=>{
+  const s=e.target.closest('select[data-lote]'); if(!s) return;
+  const lote=s.dataset.lote, td=s.parentElement, [s1,s2]=td.querySelectorAll('select');
+  if(s===s1){ const t=Number(s1.value)||null; s2.innerHTML=`<option value="">—</option>`+(t?hijos(t).map(c=>`<option value="${c.id}">${esc(c.nombre)}</option>`).join(''):''); }
+  const cid=Number(s2.value||s1.value)||null; urlClasif.set(lote,cid);
+  const { error } = await sb.from('arkaphoto_cola').update({ clasif_id:cid }).eq('lote',lote);
+  if(error){ toast('Clasificación: '+error.message); return; }
+  if(lotesMeta.has(lote)||lotes.has(lote)) await clasificarLotes([lote],cid);
+  td.classList.add('ok-flash'); setTimeout(()=>td.classList.remove('ok-flash'),600);
+});
 $('btnAnalizar').addEventListener('click', async ()=>{
   const btn=$('btnAnalizar'); btn.disabled=true;
   try{
@@ -772,11 +789,12 @@ $('btnAnalizar').addEventListener('click', async ()=>{
       for(const x of r.j.lotes){
         const L=porLote.get(x.lote); if(!L) continue;
         if(x.pendiente){ pendientesRe.push(L); continue; }
-        if(x.error){ filas.push(`<tr><td class="k">${esc(x.lote)}</td><td colspan="5" class="err">${esc(x.error)}</td></tr>`); continue; }
+        if(x.error){ filas.push(`<tr><td class="k">${esc(x.lote)}</td><td colspan="6" class="err">${esc(x.error)}</td></tr>`); continue; }
         const listadas=[...L.seqs].filter(sq=>x.faltan.includes(sq)).length, completadas=x.faltan.length-listadas;
         traer+=x.faltan.length; comp+=completadas; ex+=x.existen.length; enc+=x.encoladas.length; hechos++;
-        x.faltan.forEach(sq=>rows.push({ user_id:session.user.id, lote:x.lote, seq:sq, ext:L.ext, nombre:`${x.lote}-${sq}.${L.ext}`, url:`${L.base}/${x.lote}-${sq}.${L.ext}`, origen_archivo:archivoNombre||'texto', clasif_id:cid }));
-        if(filas.length<400) filas.push(`<tr><td class="k">${esc(x.lote)}</td><td>${L.seqs.size}</td><td>${x.tamano}</td><td><b>${x.faltan.length}</b>${completadas?` <span class="note">(+${completadas} completadas)</span>`:''}</td><td>${x.existen.length}</td><td>${x.encoladas.length}</td></tr>`);
+        const cidL=urlClasif.has(x.lote)?urlClasif.get(x.lote):cid; urlClasif.set(x.lote,cidL);
+        x.faltan.forEach(sq=>rows.push({ user_id:session.user.id, lote:x.lote, seq:sq, ext:L.ext, nombre:`${x.lote}-${sq}.${L.ext}`, url:`${L.base}/${x.lote}-${sq}.${L.ext}`, origen_archivo:archivoNombre||'texto', clasif_id:cidL }));
+        if(filas.length<400) filas.push(`<tr><td class="k">${esc(x.lote)}</td><td>${L.seqs.size}</td><td>${x.tamano}</td><td><b>${x.faltan.length}</b>${completadas?` <span class="note">(+${completadas} completadas)</span>`:''}</td><td>${x.existen.length}</td><td>${x.encoladas.length}</td><td class="cl">${selsFila(x.lote,cidL)}</td></tr>`);
       }
       await encolar(rows);
       $('uTraer').textContent=traer; $('uComp').textContent=comp; $('uEx').textContent=ex; $('uCola').textContent=enc;

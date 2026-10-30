@@ -1,4 +1,4 @@
-<!-- ARKAPHOTO v0.19.0 -->
+<!-- ARKAPHOTO v0.20.0 -->
 <!doctype html>
 <html lang="es">
 <head>
@@ -234,6 +234,9 @@ tr.sub td:first-child{color:transparent}
 .gc figcaption{display:flex;gap:8px;align-items:center;padding:6px 8px;font-size:.78rem;font-family:var(--mono)}
 .gc figcaption a{margin-left:auto;color:var(--accent)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+td.cl select{width:auto;max-width:150px;padding:4px 6px;font-size:12px}
+td.cl{white-space:nowrap}
+.ok-flash{background:color-mix(in srgb,var(--ok) 18%,transparent);transition:background .6s}
 </style>
 </head>
 <body>
@@ -443,8 +446,8 @@ tr.sub td:first-child{color:transparent}
       </div>
     </div>
     <div class="panel" id="urlsTabla" hidden style="margin-top:18px">
-      <p class="note" id="urlsTablaN" style="margin-bottom:8px"></p>
-      <div class="tw"><table class="t"><thead><tr><th>Lote</th><th>En lista</th><th>Tamaño</th><th>A traer</th><th>Ya existen</th><th>En cola</th></tr></thead><tbody id="urlsBody"></tbody></table></div>
+      <p class="note" id="urlsTablaN" style="margin-bottom:8px"></p><p class="note" style="margin-bottom:8px">La clasificación de arriba se aplica a todos los lotes al encolar; en cada fila puedes cambiarla (Tipo y Subgrupo). Se guarda al instante en la cola y en el lote.</p>
+      <div class="tw"><table class="t"><thead><tr><th>Lote</th><th>En lista</th><th>Tamaño</th><th>A traer</th><th>Ya existen</th><th>En cola</th><th>Clasificación (Tipo › Subgrupo)</th></tr></thead><tbody id="urlsBody"></tbody></table></div>
     </div>
 
     <div class="panel" style="margin-top:18px">
