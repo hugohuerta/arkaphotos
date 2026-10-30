@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-const CFG = { VERSION: '0.5.0', MIGRACION_ESPERADA: 6, URL_TTL: 3600 };
+const CFG = { VERSION: '0.5.1', MIGRACION_ESPERADA: 6, URL_TTL: 3600 };
 const $ = id => document.getElementById(id);
 const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
 const MAX = 32, BUCKET = 'arkaphoto';
@@ -42,7 +42,7 @@ async function route(){
   if(v==='inicio') renderInicio();
   if(v==='galerias') renderGalerias();
   if(v==='carga') render();
-  if(v==='admin') { renderArbol(); await renderMigraciones(); }
+  if(v==='admin') { renderArbol(); mostrarTab(adminTab); }
 }
 window.addEventListener('hashchange', route);
 sb.auth.onAuthStateChange((ev)=>{ if(ev==='SIGNED_OUT') show('vLogin'); });
@@ -396,6 +396,16 @@ $('btnTraerUrls').addEventListener('click', async ()=>{
   await cargarImagenes(); urlsNuevas=[];
 });
 
+// ---------- ADMIN · pestañas (Sistema verifica solo al abrirse)
+let adminTab = 'url'; try{ adminTab = localStorage.getItem('arkaphoto-admin-tab') || 'url'; }catch{}
+function mostrarTab(t){
+  adminTab=t; try{ localStorage.setItem('arkaphoto-admin-tab',t); }catch{}
+  document.querySelectorAll('#adminTabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
+  document.querySelectorAll('#v-admin [data-tab]').forEach(d=>d.hidden = d.dataset.tab!==t);
+  if(t==='sistema'){ verificarSistema(); renderMigraciones(); }
+}
+$('adminTabs').addEventListener('click', e=>{ const b=e.target.closest('button[data-t]'); if(b) mostrarTab(b.dataset.t); });
+
 // ---------- ADMIN · clasificación
 function renderArbol(){
   const pinta=(nivel, pid, sel)=>{
@@ -441,7 +451,8 @@ async function renderMigraciones(){
   $('migBody').innerHTML = error ? `<tr><td colspan="4" class="err">${esc(error.message)}</td></tr>` :
     (data||[]).map(m=>`<tr><td>${m.num}</td><td class="k">${esc(m.nombre)}</td><td>${esc(m.version||'')}</td><td>${new Date(m.aplicada_en).toLocaleString('es-MX')}</td></tr>`).join('');
 }
-$('btnSistema').addEventListener('click', async ()=>{
+$('btnSistema').addEventListener('click', verificarSistema);
+async function verificarSistema(){
   const out=[]; const fila=(n,estado,txt)=>out.push(`<div class="r"><span class="n">${n}</span><span><span class="dot ${estado}"></span>${esc(txt)}</span></div>`);
   $('sysBody').innerHTML='<div class="r"><span class="n">Verificando…</span></div>';
   try{ const t=await fetch('index.html',{cache:'no-store'}).then(r=>r.text()); const m=t.match(/<!-- ARKAPHOTO v([\d.]+) -->/); const v=m?.[1];
@@ -457,7 +468,8 @@ $('btnSistema').addEventListener('click', async ()=>{
   const { count } = await sb.from('arkaphoto_imagenes').select('id',{count:'exact',head:true});
   fila('imágenes', 'ok', `${count} filas en arkaphoto_imagenes`);
   $('sysBody').innerHTML=out.join('');
-});
+  $('sysHora').textContent='verificado '+new Date().toLocaleTimeString('es-MX');
+}
 $('btnValidar').addEventListener('click', async ()=>{
   $('valResumen').textContent='Comparando…'; const ul=$('valList'); ul.replaceChildren();
   let sinObjeto=0, huerfanos=0, ok=0;

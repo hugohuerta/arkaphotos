@@ -1,4 +1,4 @@
-<!-- ARKAPHOTO v0.5.0 -->
+<!-- ARKAPHOTO v0.5.1 -->
 <!doctype html>
 <html lang="es">
 <head>
@@ -288,8 +288,14 @@ textarea{font:inherit;font-family:var(--mono);font-size:.82rem;width:100%;min-he
 
   <!-- ADMIN -->
   <section id="v-admin" data-view hidden>
+    <div class="seg" id="adminTabs" style="margin-bottom:16px">
+      <button data-t="url" class="on">Configuración de URL</button>
+      <button data-t="clasif">Clasificación de galerías</button>
+      <button data-t="sistema">Sistema</button>
+    </div>
+  <div data-tab="url" hidden>
     <div class="panel">
-      <h2>Configuración</h2>
+      <h2>Configuración de URL y costo</h2>
       <form class="row" id="fCfg">
         <label class="f grow">Ruta pública (AWS)
           <input type="text" id="baseUrl" placeholder="https://mi-bucket.s3.amazonaws.com/carpeta" spellcheck="false">
@@ -307,8 +313,9 @@ textarea{font:inherit;font-family:var(--mono);font-size:.82rem;width:100%;min-he
       </form>
       <p class="note" style="margin-top:8px">La URL de cada faltante se arma como <span class="key">{ruta}/{archivo}</span>. Tarifa por default: Supabase Storage (US$0.021/GB-mes; Free incluye 1 GB, Pro 100 GB).</p>
     </div>
-
-    <div class="panel" style="margin-top:18px">
+  </div>
+  <div data-tab="clasif" hidden>
+    <div class="panel">
       <h2>Clasificación de galerías</h2>
       <p class="note" style="margin-bottom:10px">Tres niveles: Tipo → Subgrupo → Detalle. Selecciona un elemento para ver y crear los del siguiente nivel. Un elemento con hijos o con galerías asignadas no se puede borrar.</p>
       <div class="cols3">
@@ -317,22 +324,22 @@ textarea{font:inherit;font-family:var(--mono);font-size:.82rem;width:100%;min-he
         <div class="col"><h3>3 · Detalle</h3><ul id="cl3"></ul><form data-nivel="3" hidden><input type="text" placeholder="Nuevo detalle" maxlength="60"><button type="submit">+</button></form><p class="note" id="cl3note">Selecciona un subgrupo</p></div>
       </div>
     </div>
-
-    <div class="panel" style="margin-top:18px">
-      <div class="row" style="justify-content:space-between;margin-bottom:10px"><h2 style="margin:0">Sistema</h2><button id="btnSistema">Verificar ahora</button></div>
+  </div>
+  <div data-tab="sistema" hidden>
+    <div class="panel">
+      <div class="row" style="justify-content:space-between;margin-bottom:10px"><h2 style="margin:0">Sistema</h2><div class="row"><span class="note" id="sysHora"></span><button id="btnSistema">Verificar de nuevo</button></div></div>
       <div class="sys" id="sysBody"><div class="r"><span class="n">Sin verificar</span></div></div>
     </div>
-
     <div class="panel" style="margin-top:18px">
       <h2>Migraciones</h2>
       <div class="tw"><table class="t"><thead><tr><th>#</th><th>Nombre</th><th>Versión</th><th>Aplicada</th></tr></thead><tbody id="migBody"></tbody></table></div>
     </div>
-
     <div class="panel" style="margin-top:18px">
       <div class="row" style="justify-content:space-between;margin-bottom:10px"><h2 style="margin:0">Validación de archivos</h2><button id="btnValidar">Comparar registro vs bucket</button></div>
       <p class="note" id="valResumen">Compara cada fila de <span class="key">arkaphoto_imagenes</span> con los objetos del bucket, lote por lote.</p>
       <ul class="lst" id="valList" style="margin-top:10px"></ul>
     </div>
+  </div>
   </section>
 </div>
 
