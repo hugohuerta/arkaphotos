@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-const CFG = { VERSION: '0.6.0', MIGRACION_ESPERADA: 7, URL_TTL: 3600 };
+const CFG = { VERSION: '0.7.0', MIGRACION_ESPERADA: 8, URL_TTL: 3600 };
 const $ = id => document.getElementById(id);
 const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
 const MAX = 32, BUCKET = 'arkaphoto';
@@ -130,8 +130,12 @@ function etiqueta(key){
   const ts=key.split('-')[0];
   const iguales=[...lotes.keys()].filter(k=>k.split('-')[0]===ts).sort();
   const letra = iguales.length>1 ? '-'+String.fromCharCode(65+iguales.indexOf(key)) : '';
-  const nom=(lotesMeta.get(key)?.nombre||'').trim();
-  return (nom?nom.toUpperCase():'LOTE')+' '+ts+letra;
+  const meta=lotesMeta.get(key)||{}; const ruta=rutaClasif(meta.clasif_id);
+  const partes=[];
+  if(ruta[1]) { partes.push(ruta[1].nombre); if(ruta[2]) partes.push(ruta[2].nombre); }
+  else if((meta.nombre||'').trim()) partes.push(meta.nombre.trim());
+  else partes.push('LOTE');
+  return partes.map(x=>x.toUpperCase()).join(' - ')+' - '+ts+letra;
 }
 async function firmar(rutas){
   if(!rutas.length) return new Map();
@@ -234,14 +238,11 @@ function renderGalerias(){
     }
     if(!cards.length) continue;
     visibles++;
-    const ruta=rutaClasif(meta.clasif_id).map(c=>esc(c.nombre)).join(' › ');
-    const tg=tagsDe(key).map(t=>`<span class="tag">${esc(t.nombre)}</span>`).join('');
+    const tg=tagsDe(key).map(t=>`<span class="tag">${esc(t.nombre)}<button type="button" class="qdel" data-id="${t.id}" title="Quitar tag">✕</button></span>`).join('');
     parts.push(`<section class="panel" style="margin-bottom:16px" data-lote="${esc(key)}">
-      <div class="row" style="justify-content:space-between;margin-bottom:8px">
-        <div><div class="etq">${esc(etiqueta(key))}<small>${esc(key)}</small></div>
-          <div class="ruta">${ruta?ruta:'<span class="pill warn">sin clasificar</span>'} · ${r.n} de ${r.hasta}${r.fav?' · ★ '+r.fav:''}</div>
-          ${tg?`<div class="tags" style="margin-top:6px">${tg}</div>`:''}</div>
-        <button class="quiet ed" data-lote="${esc(key)}">Editar</button>
+      <div class="ghead">
+        <div class="izq"><span class="etq" title="${esc(key)}">${esc(etiqueta(key))}</span>${meta.clasif_id?'':'<span class="pill warn">sin clasificar</span>'}${r.fav?`<span class="pill ok">★ ${r.fav}</span>`:''}<span class="tags">${tg}</span></div>
+        <div class="der"><span class="cnt ${r.faltan?'miss':''}">${r.n} de ${r.hasta}</span><span class="qtag"><button class="qadd" data-lote="${esc(key)}">+ Tag</button></span><button class="ed" data-lote="${esc(key)}">Editar</button></div>
       </div>
       <div class="gal">${cards.join('')}</div></section>`);
   }
@@ -287,10 +288,25 @@ function abrirEditor(sec, key){
     loteTags.set(key,new Set(sel));
     lotesMeta.set(key,row); toast('Galería guardada'); renderGalerias();
   });
-  sec.querySelector('.row').after(f); f.nombre.focus();
+  sec.querySelector('.ghead').after(f); f.nombre.focus();
+}
+async function setTagLote(key, tagId, poner){
+  if(poner){ const { error } = await sb.from('arkaphoto_lote_tags').insert({ user_id:session.user.id, lote:key, tag_id:tagId }); if(error && error.code!=='23505'){ toast('Tag: '+error.message); return false; } if(!loteTags.has(key)) loteTags.set(key,new Set()); loteTags.get(key).add(tagId); }
+  else { const { error } = await sb.from('arkaphoto_lote_tags').delete().eq('lote',key).eq('tag_id',tagId); if(error){ toast('Tag: '+error.message); return false; } loteTags.get(key)?.delete(tagId); }
+  return true;
 }
 $('galBody').addEventListener('click', async e=>{
   const ed=e.target.closest('button.ed'); if(ed){ abrirEditor(ed.closest('section'), ed.dataset.lote); return; }
+  const qd=e.target.closest('button.qdel'); if(qd){ const key=qd.closest('section').dataset.lote; if(await setTagLote(key, Number(qd.dataset.id), false)) renderGalerias(); return; }
+  const qa=e.target.closest('button.qadd'); if(qa){
+    const key=qa.dataset.lote, wrap=qa.parentElement;
+    wrap.innerHTML=`<input type="text" list="tagsDLq" placeholder="tag y Enter" autocomplete="off"><datalist id="tagsDLq">${[...tags.values()].map(t=>`<option value="${esc(t.nombre)}">`).join('')}</datalist>`;
+    const inp=wrap.querySelector('input'); inp.focus();
+    const commit=async ()=>{ const v=inp.value.trim(); if(!v){ renderGalerias(); return; } const t=await tagPorNombre(v); if(t) await setTagLote(key,t.id,true); renderGalerias(); };
+    inp.addEventListener('keydown', ev=>{ if(ev.key==='Enter'||ev.key===','){ ev.preventDefault(); commit(); } if(ev.key==='Escape') renderGalerias(); });
+    inp.addEventListener('blur', ()=>setTimeout(commit,150));
+    return;
+  }
   const b=e.target.closest('button.fav'); if(!b) return;
   const id=Number(b.dataset.id); let it; for(const L of lotes.values()) for(const x of L.items.values()) if(x.id===id) it=x;
   if(!it) return;
