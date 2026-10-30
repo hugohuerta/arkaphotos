@@ -19,6 +19,7 @@ supabase/03_seguridad.sql bucket privado + arkaphoto_migraciones
 supabase/04_grants.sql    grants explícitos (obligatorios en este proyecto)
 supabase/05_galerias.sql  favoritas, url_origen, tarifa para el dashboard
 supabase/06_clasificacion.sql árbol de clasificación (3 niveles) y metadatos por lote
+supabase/07_tags.sql      tags por lote
 public/app.js            JS de la app (separado del HTML por la CSP)
 api/version.js           { app, version, migracion_esperada, migracion_aplicada }
 vercel.json              cabeceras de seguridad (CSP, HSTS, no-referrer)
@@ -26,7 +27,7 @@ vercel.json              cabeceras de seguridad (CSP, HSTS, no-referrer)
 
 ## 1. Supabase
 
-1. Crear proyecto. SQL Editor → ejecutar `supabase/01_inicial.sql`, `02_otp.sql`, `03_seguridad.sql`, `04_grants.sql`, `05_galerias.sql` y `06_clasificacion.sql` en orden.
+1. Crear proyecto. SQL Editor → ejecutar `supabase/01_inicial.sql`, `02_otp.sql`, `03_seguridad.sql`, `04_grants.sql`, `05_galerias.sql`, `06_clasificacion.sql` y `07_tags.sql` en orden.
 2. **Authentication → Providers → Email**: dejar habilitado (la sesión se abre con un enlace mágico generado en servidor; el correo lo manda Resend, no Supabase).
 3. Copiar de **Project Settings → API**: Project URL, anon key, service_role key.
 
@@ -66,7 +67,7 @@ vercel
 ## 3. Secciones
 
 - **Inicio**: fotos, espacio ocupado, costo aproximado mensual ((GB − incluidos) × tarifa, ambos editables en Admin), favoritas; tabla por lote.
-- **Galerías**: por lote, con ★ favorita, filtros (todos / favoritas / incompletos / sin clasificar) y por tipo. "Editar" asigna nombre, clasificación (Tipo → Subgrupo → Detalle) y notas. Etiqueta: `LOTE <ts>` o `NOMBRE <ts>`, con `-A/-B` si el timestamp se repite. Imágenes por URL firmada (1 h).
+- **Galerías**: por lote, con ★ favorita; filtro en cascada Tipo → Subgrupo → Detalle, búsqueda de texto, filtro por tag y estado (todos / favoritas / incompletos / sin clasificar). "Editar" asigna nombre, clasificación (Tipo → Subgrupo → Detalle), notas y tags (existentes o nuevos al escribir). Etiqueta: `LOTE <ts>` o `NOMBRE <ts>`, con `-A/-B` si el timestamp se repite. Imágenes por URL firmada (1 h).
 - **Carga fotos**: subida PNG/JPG; resuelve copias `(n)`; detecta faltantes 1–32; "TRAER" las descarga de `{ruta}/{nombre}`.
 - **Carga de URL**: lista de URLs (una por línea); "Analizar" clasifica nueva / ya existe / repetida / no reconocida; "Traer nuevas" las descarga vía `/api/traer {urls}`.
 - **Admin**: clasificación de galerías (árbol de 3 niveles), configuración (ruta pública, rango, tarifa, GB incluidos), Sistema (versiones servidas vs esperadas, migración aplicada vs esperada, `x-app-version` de cada función), migraciones aplicadas, validación registro vs bucket.

@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-const CFG = { VERSION: '0.5.1', MIGRACION_ESPERADA: 6, URL_TTL: 3600 };
+const CFG = { VERSION: '0.6.0', MIGRACION_ESPERADA: 7, URL_TTL: 3600 };
 const $ = id => document.getElementById(id);
 const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
 const MAX = 32, BUCKET = 'arkaphoto';
@@ -22,7 +22,10 @@ let session = null;
 const cfg = { base:'', rango:'16', tarifa:0.021, gbInc:1 };
 const lotes = new Map();   // key -> {ts,hash,ext,items:Map(seq->{id,url,origen,bytes,favorita,ruta})}
 const raw = new Map();     // archivos locales pendientes de subir (nombre -> File)
-const bad = []; let dupes = [], lastMissing = [], galFiltro = 'todos', galTipo = '';
+const bad = []; let dupes = [], lastMissing = [], galFiltro = 'todos';
+const fil = { tipo:'', sub:'', det:'', q:'', tag:null };
+const tags = new Map();        // id -> {id,nombre}
+const loteTags = new Map();    // lote -> Set(tag_id)
 const clasif = new Map();  // id -> {id,parent_id,nivel,nombre,orden}
 const lotesMeta = new Map(); // lote -> {nombre,clasif_id,notas}
 let clSel = { 1:null, 2:null };  // selección en el árbol de Admin
@@ -42,7 +45,7 @@ async function route(){
   if(v==='inicio') renderInicio();
   if(v==='galerias') renderGalerias();
   if(v==='carga') render();
-  if(v==='admin') { renderArbol(); mostrarTab(adminTab); }
+  if(v==='admin') { renderArbol(); renderAdminTags(); mostrarTab(adminTab); }
 }
 window.addEventListener('hashchange', route);
 sb.auth.onAuthStateChange((ev)=>{ if(ev==='SIGNED_OUT') show('vLogin'); });
@@ -91,13 +94,27 @@ async function cargarTodo(){
   cfg.base = (c?.ruta_publica||'').replace(/\/+$/,''); cfg.rango = c?.rango||'16';
   cfg.tarifa = Number(c?.tarifa_gb_usd ?? 0.021); cfg.gbInc = Number(c?.gb_incluidos ?? 1);
   $('baseUrl').value = cfg.base; $('rango').value = cfg.rango; $('tarifa').value = cfg.tarifa; $('gbInc').value = cfg.gbInc;
-  await Promise.all([cargarClasif(), cargarLotesMeta(), cargarImagenes()]);
+  await Promise.all([cargarClasif(), cargarLotesMeta(), cargarTags(), cargarImagenes()]);
+}
+async function cargarTags(){
+  const [t, lt] = await Promise.all([ sb.from('arkaphoto_tags').select('id,nombre').order('nombre'), sb.from('arkaphoto_lote_tags').select('lote,tag_id') ]);
+  if(t.error||lt.error){ toast('Error leyendo tags'); return; }
+  tags.clear(); (t.data||[]).forEach(x=>tags.set(x.id,x));
+  loteTags.clear(); (lt.data||[]).forEach(x=>{ if(!loteTags.has(x.lote)) loteTags.set(x.lote,new Set()); loteTags.get(x.lote).add(x.tag_id); });
+}
+const tagsDe = key => [...(loteTags.get(key)||[])].map(id=>tags.get(id)).filter(Boolean).sort((a,b)=>a.nombre.localeCompare(b.nombre));
+async function tagPorNombre(nombre){
+  nombre=nombre.trim().replace(/\s+/g,' '); if(!nombre) return null;
+  const ex=[...tags.values()].find(t=>t.nombre.toLowerCase()===nombre.toLowerCase()); if(ex) return ex;
+  const { data, error } = await sb.from('arkaphoto_tags').insert({ user_id:session.user.id, nombre }).select().single();
+  if(error){ toast('No se creó el tag: '+error.message); return null; }
+  tags.set(data.id,data); return data;
 }
 async function cargarClasif(){
   const { data, error } = await sb.from('arkaphoto_clasif').select('id,parent_id,nivel,nombre,orden').order('nivel').order('orden').order('nombre');
   if(error){ toast('Error leyendo clasificación: '+error.message); return; }
   clasif.clear(); (data||[]).forEach(c=>clasif.set(c.id,c));
-  const sel=$('galTipo'); const cur=sel.value; sel.innerHTML='<option value="">Todos los tipos</option>'+hijos(null).map(t=>`<option value="${t.id}">${esc(t.nombre)}</option>`).join(''); sel.value=cur;
+  const sel=$('fTipo'); sel.innerHTML='<option value="">Todos los tipos</option>'+hijos(null).map(t=>`<option value="${t.id}">${esc(t.nombre)}</option>`).join(''); sel.value=fil.tipo;
 }
 async function cargarLotesMeta(){
   const { data, error } = await sb.from('arkaphoto_lotes').select('lote,nombre,clasif_id,notas');
@@ -171,15 +188,42 @@ function renderInicio(){
 
 // ---------- GALERÍAS
 $('galFiltro').addEventListener('click', e=>{ const b=e.target.closest('button'); if(!b) return; galFiltro=b.dataset.f; document.querySelectorAll('#galFiltro button').forEach(x=>x.classList.toggle('on',x===b)); renderGalerias(); });
-$('galTipo').addEventListener('change', e=>{ galTipo=e.target.value; renderGalerias(); });
+function pintaCascada(){
+  const subs = fil.tipo ? hijos(Number(fil.tipo)) : [];
+  $('fSubL').hidden = !fil.tipo; $('fSub').innerHTML='<option value="">Todos</option>'+subs.map(c=>`<option value="${c.id}">${esc(c.nombre)}</option>`).join(''); $('fSub').value=fil.sub;
+  const dets = fil.sub ? hijos(Number(fil.sub)) : [];
+  $('fDetL').hidden = !fil.sub; $('fDet').innerHTML='<option value="">Todos</option>'+dets.map(c=>`<option value="${c.id}">${esc(c.nombre)}</option>`).join(''); $('fDet').value=fil.det;
+}
+$('fTipo').addEventListener('change', e=>{ fil.tipo=e.target.value; fil.sub=''; fil.det=''; pintaCascada(); renderGalerias(); });
+$('fSub').addEventListener('change', e=>{ fil.sub=e.target.value; fil.det=''; pintaCascada(); renderGalerias(); });
+$('fDet').addEventListener('change', e=>{ fil.det=e.target.value; renderGalerias(); });
+$('fBuscar').addEventListener('input', e=>{ fil.q=e.target.value.trim().toLowerCase(); renderGalerias(); });
+$('fTags').addEventListener('click', e=>{ const t=e.target.closest('.tag.filtro'); if(!t) return; fil.tag = fil.tag===Number(t.dataset.id)?null:Number(t.dataset.id); renderGalerias(); });
+function pintaTagsFiltro(){
+  const usados=new Map(); for(const set of loteTags.values()) for(const id of set) usados.set(id,(usados.get(id)||0)+1);
+  $('fTags').innerHTML=[...usados].map(([id,n])=>{ const t=tags.get(id); return t?`<span class="tag filtro ${fil.tag===id?'on':''}" data-id="${id}">${esc(t.nombre)} <small>${n}</small></span>`:''; }).join('');
+}
+function pasaFiltro(key, L, r, meta){
+  if(galFiltro==='incompletos' && !r.faltan) return false;
+  if(galFiltro==='sinclasif' && meta.clasif_id) return false;
+  const ruta=rutaClasif(meta.clasif_id);
+  if(fil.det){ if(String(ruta[2]?.id)!==fil.det) return false; }
+  else if(fil.sub){ if(String(ruta[1]?.id)!==fil.sub) return false; }
+  else if(fil.tipo){ if(String(ruta[0]?.id)!==fil.tipo) return false; }
+  if(fil.tag && !(loteTags.get(key)||new Set()).has(fil.tag)) return false;
+  if(fil.q){
+    const texto=[etiqueta(key), key, meta.nombre, meta.notas, ...ruta.map(c=>c.nombre), ...tagsDe(key).map(t=>t.nombre)].filter(Boolean).join(' ').toLowerCase();
+    if(!texto.includes(fil.q)) return false;
+  }
+  return true;
+}
 function renderGalerias(){
-  let total=0, fav=0; const parts=[];
+  pintaCascada(); pintaTagsFiltro();
+  let total=0, fav=0, visibles=0; const parts=[];
   for(const [key,L] of lotes){
     const r=resumenLote(L); total+=r.n; fav+=r.fav;
     const meta=lotesMeta.get(key)||{};
-    if(galFiltro==='incompletos' && !r.faltan) continue;
-    if(galFiltro==='sinclasif' && meta.clasif_id) continue;
-    if(galTipo && String(tipoDe(meta.clasif_id))!==galTipo) continue;
+    if(!pasaFiltro(key,L,r,meta)) continue;
     const cards=[];
     for(let i=1;i<=r.hasta;i++){
       const it=L.items.get(i);
@@ -189,17 +233,20 @@ function renderGalerias(){
       } else if(galFiltro!=='fav') cards.push(`<figure class="gc"><div class="cell miss" style="aspect-ratio:1;border:0;border-radius:0">${i}</div><figcaption><b>${i}</b><span class="pill miss">falta</span></figcaption></figure>`);
     }
     if(!cards.length) continue;
+    visibles++;
     const ruta=rutaClasif(meta.clasif_id).map(c=>esc(c.nombre)).join(' › ');
+    const tg=tagsDe(key).map(t=>`<span class="tag">${esc(t.nombre)}</span>`).join('');
     parts.push(`<section class="panel" style="margin-bottom:16px" data-lote="${esc(key)}">
       <div class="row" style="justify-content:space-between;margin-bottom:8px">
         <div><div class="etq">${esc(etiqueta(key))}<small>${esc(key)}</small></div>
-          <div class="ruta">${ruta?ruta:'<span class="pill warn">sin clasificar</span>'} · ${r.n} de ${r.hasta}${r.fav?' · ★ '+r.fav:''}</div></div>
+          <div class="ruta">${ruta?ruta:'<span class="pill warn">sin clasificar</span>'} · ${r.n} de ${r.hasta}${r.fav?' · ★ '+r.fav:''}</div>
+          ${tg?`<div class="tags" style="margin-top:6px">${tg}</div>`:''}</div>
         <button class="quiet ed" data-lote="${esc(key)}">Editar</button>
       </div>
       <div class="gal">${cards.join('')}</div></section>`);
   }
   $('galBody').innerHTML = parts.join('') || '<p class="note">Nada que mostrar con este filtro.</p>';
-  $('galStats').textContent = `${total} imágenes · ${fav} favoritas · ${lotes.size} lotes`;
+  $('galStats').textContent = `${visibles} de ${lotes.size} galerías · ${total} imágenes · ${fav} favoritas`;
 }
 function selectOpts(list, cur, vacio){ return `<option value="">${vacio}</option>`+list.map(c=>`<option value="${c.id}" ${c.id===cur?'selected':''}>${esc(c.nombre)}</option>`).join(''); }
 function abrirEditor(sec, key){
@@ -211,16 +258,33 @@ function abrirEditor(sec, key){
     <label class="f">Subgrupo<select name="n2">${selectOpts(n1?hijos(n1):[],n2,'—')}</select></label>
     <label class="f">Detalle<select name="n3">${selectOpts(n2?hijos(n2):[],n3,'—')}</select></label>
     <label class="f full" style="display:grid">Notas<input type="text" name="notas" value="${esc(meta.notas||'')}"></label>
+    <div class="f full" style="display:grid">Tags
+      <div class="tagedit" id="tagedit"><input type="text" name="tagin" list="tagsDL" placeholder="escribe y Enter: existente o nuevo" autocomplete="off"><datalist id="tagsDL">${[...tags.values()].map(t=>`<option value="${esc(t.nombre)}">`).join('')}</datalist></div>
+    </div>
     <div class="full"><button class="primary" type="submit">Guardar</button><button type="button" class="cancel">Cancelar</button></div>`;
   f.n1.addEventListener('change',()=>{ f.n2.innerHTML=selectOpts(f.n1.value?hijos(Number(f.n1.value)):[],null,'—'); f.n3.innerHTML=selectOpts([],null,'—'); });
   f.n2.addEventListener('change',()=>{ f.n3.innerHTML=selectOpts(f.n2.value?hijos(Number(f.n2.value)):[],null,'—'); });
   f.querySelector('.cancel').addEventListener('click',()=>f.remove());
+  // tags: estado local hasta Guardar
+  const sel=new Set(loteTags.get(key)||[]);
+  const te=f.querySelector('#tagedit'), ti=f.tagin;
+  const pintaTags=()=>{ te.querySelectorAll('.tag').forEach(x=>x.remove()); [...sel].map(id=>tags.get(id)).filter(Boolean).forEach(t=>{ const sp=document.createElement('span'); sp.className='tag'; sp.innerHTML=`${esc(t.nombre)}<button type="button" data-id="${t.id}" title="Quitar">✕</button>`; te.insertBefore(sp, ti); }); };
+  pintaTags();
+  te.addEventListener('click',e=>{ const b=e.target.closest('button[data-id]'); if(b){ sel.delete(Number(b.dataset.id)); pintaTags(); } });
+  ti.addEventListener('keydown', async e=>{ if(e.key!=='Enter' && e.key!==',') return; e.preventDefault(); const t=await tagPorNombre(ti.value); if(t){ sel.add(t.id); ti.value=''; pintaTags(); } });
+  ti.addEventListener('change', async ()=>{ if(!ti.value.trim()) return; const t=await tagPorNombre(ti.value); if(t){ sel.add(t.id); ti.value=''; pintaTags(); } });
   f.addEventListener('submit', async ev=>{
     ev.preventDefault();
     const clasif_id = Number(f.n3.value||f.n2.value||f.n1.value)||null;
     const row={ user_id:session.user.id, lote:key, nombre:f.nombre.value.trim()||null, clasif_id, notas:f.notas.value.trim()||null, actualizado:new Date().toISOString() };
+    if(ti.value.trim()){ const t=await tagPorNombre(ti.value); if(t) sel.add(t.id); }
     const { error } = await sb.from('arkaphoto_lotes').upsert(row);
     if(error){ toast('No se guardó: '+error.message); return; }
+    const antes=loteTags.get(key)||new Set();
+    const quitar=[...antes].filter(id=>!sel.has(id)), poner=[...sel].filter(id=>!antes.has(id));
+    if(quitar.length){ const { error:e1 } = await sb.from('arkaphoto_lote_tags').delete().eq('lote',key).in('tag_id',quitar); if(e1) toast('Tags: '+e1.message); }
+    if(poner.length){ const { error:e2 } = await sb.from('arkaphoto_lote_tags').insert(poner.map(tag_id=>({ user_id:session.user.id, lote:key, tag_id }))); if(e2) toast('Tags: '+e2.message); }
+    loteTags.set(key,new Set(sel));
     lotesMeta.set(key,row); toast('Galería guardada'); renderGalerias();
   });
   sec.querySelector('.row').after(f); f.nombre.focus();
@@ -405,6 +469,28 @@ function mostrarTab(t){
   if(t==='sistema'){ verificarSistema(); renderMigraciones(); }
 }
 $('adminTabs').addEventListener('click', e=>{ const b=e.target.closest('button[data-t]'); if(b) mostrarTab(b.dataset.t); });
+
+// ---------- ADMIN · tags
+function renderAdminTags(){
+  const uso=new Map(); for(const set of loteTags.values()) for(const id of set) uso.set(id,(uso.get(id)||0)+1);
+  $('adminTags').innerHTML=[...tags.values()].sort((a,b)=>a.nombre.localeCompare(b.nombre)).map(t=>`<span class="tag" data-id="${t.id}">${esc(t.nombre)} <small>${uso.get(t.id)||0}</small><button type="button" class="ren" title="Renombrar">✎</button><button type="button" class="del" title="Borrar">✕</button></span>`).join('') || '<span class="note">Sin tags todavía.</span>';
+}
+$('adminTags').addEventListener('click', async e=>{
+  const sp=e.target.closest('.tag[data-id]'); if(!sp) return; const id=Number(sp.dataset.id), t=tags.get(id);
+  if(e.target.closest('.ren')){
+    const nuevo=prompt('Nuevo nombre del tag', t.nombre); if(!nuevo||!nuevo.trim()||nuevo.trim()===t.nombre) return;
+    const { error } = await sb.from('arkaphoto_tags').update({ nombre:nuevo.trim() }).eq('id',id);
+    if(error){ toast(error.code==='23505'?'Ya existe ese tag':error.message); return; }
+    t.nombre=nuevo.trim(); renderAdminTags();
+  } else if(e.target.closest('.del')){
+    let uso=0; for(const set of loteTags.values()) if(set.has(id)) uso++;
+    if(uso){ toast(`Lo usan ${uso} galería(s); quítalo primero`); return; }
+    if(!confirm(`¿Borrar el tag "${t.nombre}"?`)) return;
+    const { error } = await sb.from('arkaphoto_tags').delete().eq('id',id);
+    if(error){ toast(error.message); return; }
+    tags.delete(id); renderAdminTags();
+  }
+});
 
 // ---------- ADMIN · clasificación
 function renderArbol(){

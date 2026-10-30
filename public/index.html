@@ -1,4 +1,4 @@
-<!-- ARKAPHOTO v0.5.1 -->
+<!-- ARKAPHOTO v0.6.0 -->
 <!doctype html>
 <html lang="es">
 <head>
@@ -150,6 +150,19 @@ textarea{font:inherit;font-family:var(--mono);font-size:.82rem;width:100%;min-he
 .etq small{font-family:var(--mono);font-weight:400;color:var(--muted);font-size:.72rem;margin-left:8px;word-break:break-all}
 .ruta{font-size:.78rem;color:var(--muted)}
 .ruta b{color:var(--fg);font-weight:500}
+/* tags */
+.tags{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.tag{display:inline-flex;align-items:center;gap:4px;font-size:.74rem;padding:2px 8px;border-radius:999px;background:var(--panel);border:1px solid var(--line);color:var(--fg)}
+.tag button{border:0;background:none;padding:0 0 0 2px;color:var(--muted);cursor:pointer;font-size:.8rem;line-height:1}
+.tag.filtro{cursor:pointer}
+.tag.filtro.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.filtros{display:grid;gap:10px;margin-bottom:14px}
+.filtros .fila{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.filtros select,.filtros input[type=search]{width:auto;min-width:180px}
+.filtros input[type=search]{flex:1 1 220px;font-family:var(--font)}
+.tagedit{display:flex;flex-wrap:wrap;gap:6px;align-items:center;border:1px solid var(--line);border-radius:6px;padding:6px 8px;background:var(--bg)}
+.tagedit input{border:0;background:transparent;flex:1 1 120px;min-width:120px;padding:4px;font-family:var(--font)}
+.tagedit input:focus{outline:none}
 /* galería */
 .gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
 .gc{margin:0;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}
@@ -223,10 +236,18 @@ textarea{font:inherit;font-family:var(--mono);font-size:.82rem;width:100%;min-he
 
   <!-- GALERÍAS -->
   <section id="v-galerias" data-view hidden>
-    <div class="row" style="justify-content:space-between;margin-bottom:14px">
-      <div class="row"><div class="seg" id="galFiltro"><button class="on" data-f="todos">Todos</button><button data-f="fav">Favoritas</button><button data-f="incompletos">Incompletos</button><button data-f="sinclasif">Sin clasificar</button></div>
-      <select id="galTipo" style="width:auto"><option value="">Todos los tipos</option></select></div>
-      <span class="note" id="galStats"></span>
+    <div class="filtros">
+      <div class="fila">
+        <label class="f">Tipo<select id="fTipo"><option value="">Todos los tipos</option></select></label>
+        <label class="f" id="fSubL" hidden>Subgrupo<select id="fSub"><option value="">Todos</option></select></label>
+        <label class="f" id="fDetL" hidden>Detalle<select id="fDet"><option value="">Todos</option></select></label>
+        <label class="f" style="flex:1 1 220px">Buscar<input type="search" id="fBuscar" placeholder="nombre, clave, clasificación, tag, notas"></label>
+      </div>
+      <div class="fila">
+        <div class="seg" id="galFiltro"><button class="on" data-f="todos">Todos</button><button data-f="fav">Favoritas</button><button data-f="incompletos">Incompletos</button><button data-f="sinclasif">Sin clasificar</button></div>
+        <div class="tags" id="fTags"></div>
+        <span class="note" id="galStats" style="margin-left:auto"></span>
+      </div>
     </div>
     <div id="galBody"></div>
   </section>
@@ -315,6 +336,11 @@ textarea{font:inherit;font-family:var(--mono);font-size:.82rem;width:100%;min-he
     </div>
   </div>
   <div data-tab="clasif" hidden>
+    <div class="panel" style="margin-bottom:18px">
+      <h2>Tags</h2>
+      <p class="note" style="margin-bottom:8px">Etiquetas libres por galería. Se crean desde Galerías → Editar; aquí se renombran o se borran (solo si no están en uso).</p>
+      <div class="tags" id="adminTags"></div>
+    </div>
     <div class="panel">
       <h2>Clasificación de galerías</h2>
       <p class="note" style="margin-bottom:10px">Tres niveles: Tipo → Subgrupo → Detalle. Selecciona un elemento para ver y crear los del siguiente nivel. Un elemento con hijos o con galerías asignadas no se puede borrar.</p>

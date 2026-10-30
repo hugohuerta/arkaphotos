@@ -1,5 +1,6 @@
 # CAMBIOS · ARKAPHOTO
 
+- v0.6.0 — 2026-10-29 — Galerías: filtro en cascada Tipo → Subgrupo → Detalle, búsqueda de texto, filtro por tag; tags por lote (existentes o nuevos al escribir) en Editar; tags administrables en Admin → Clasificación (mig 07)
 - v0.5.1 — 2026-10-29 — Admin en pestañas (Configuración de URL · Clasificación de galerías · Sistema); Sistema verifica automáticamente al abrirse
 - v0.5.0 — 2026-10-29 — clasificación de galerías en 3 niveles (Tipo → Subgrupo → Detalle) administrada en Admin; metadatos por lote (nombre, clasificación, notas) editables en Galerías; etiqueta de lote LOTE <ts>[-A] / NOMBRE <ts>[-A]; filtro por tipo y "sin clasificar" (mig 06)
 - v0.4.0 — 2026-10-29 — menú: Inicio (dashboard: fotos, espacio, costo aprox., favoritas), Galerías (favoritas, filtros), Carga fotos, Carga de URL (valida existencia antes de traer), Admin (config, Sistema, migraciones, validación registro vs bucket); /api/traer acepta urls[] (mig 05)
