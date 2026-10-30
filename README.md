@@ -17,6 +17,7 @@ supabase/01_inicial.sql  tablas, RLS, bucket y políticas de Storage
 supabase/02_otp.sql      tabla de códigos de acceso
 supabase/03_seguridad.sql bucket privado + arkaphoto_migraciones
 supabase/04_grants.sql    grants explícitos (obligatorios en este proyecto)
+supabase/05_galerias.sql  favoritas, url_origen, tarifa para el dashboard
 public/app.js            JS de la app (separado del HTML por la CSP)
 api/version.js           { app, version, migracion_esperada, migracion_aplicada }
 vercel.json              cabeceras de seguridad (CSP, HSTS, no-referrer)
@@ -24,7 +25,7 @@ vercel.json              cabeceras de seguridad (CSP, HSTS, no-referrer)
 
 ## 1. Supabase
 
-1. Crear proyecto. SQL Editor → ejecutar `supabase/01_inicial.sql`, `02_otp.sql`, `03_seguridad.sql` y `04_grants.sql` en orden.
+1. Crear proyecto. SQL Editor → ejecutar `supabase/01_inicial.sql`, `02_otp.sql`, `03_seguridad.sql`, `04_grants.sql` y `05_galerias.sql` en orden.
 2. **Authentication → Providers → Email**: dejar habilitado (la sesión se abre con un enlace mágico generado en servidor; el correo lo manda Resend, no Supabase).
 3. Copiar de **Project Settings → API**: Project URL, anon key, service_role key.
 
@@ -61,13 +62,13 @@ git commit -m "ARKAPHOTO inicial"
 vercel
 ```
 
-## 3. Flujo
+## 3. Secciones
 
-1. Correo → `/api/auth/send` manda un código de 8 dígitos por Resend (caduca en 10 min, 5 intentos, reenvío cada 45 s) → `/api/auth/verify` lo valida y entrega un `token_hash` → `supabase.auth.verifyOtp` abre la sesión. El usuario de Auth se crea en el primer acceso.
-2. Configuración: ruta pública (base de la URL de AWS) y regla de rango (bloques de 16 o siempre 32).
-3. Subir imágenes: se resuelven copias `(n)` (mismo tamaño → se ignora; sin original → se procesa con nombre limpio; tamaño distinto → se conserva la original y se marca). Cada imagen va a `arkaphoto/<uid>/<lote>/<nombre>` y a `arkaphoto_imagenes`.
-4. Faltantes → "Sí, validar" → **TRAER a ARKAPHOTO** → `/api/traer` descarga `{ruta}/{nombre}` por cada faltante y la guarda con `origen = traida`.
-5. "Galería ↗" abre `#galeria` en otra pestaña con todo el bucket por lote.
+- **Inicio**: fotos, espacio ocupado, costo aproximado mensual ((GB − incluidos) × tarifa, ambos editables en Admin), favoritas; tabla por lote.
+- **Galerías**: por lote, con ★ favorita y filtros (todos / favoritas / incompletos). Imágenes por URL firmada (1 h).
+- **Carga fotos**: subida PNG/JPG; resuelve copias `(n)`; detecta faltantes 1–32; "TRAER" las descarga de `{ruta}/{nombre}`.
+- **Carga de URL**: lista de URLs (una por línea); "Analizar" clasifica nueva / ya existe / repetida / no reconocida; "Traer nuevas" las descarga vía `/api/traer {urls}`.
+- **Admin**: configuración (ruta pública, rango, tarifa, GB incluidos), Sistema (versiones servidas vs esperadas, migración aplicada vs esperada, `x-app-version` de cada función), migraciones aplicadas, validación registro vs bucket.
 
 ## Notas
 

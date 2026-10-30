@@ -1,4 +1,4 @@
-<!-- ARKAPHOTO v0.3.2 -->
+<!-- ARKAPHOTO v0.4.0 -->
 <!doctype html>
 <html lang="es">
 <head>
@@ -100,6 +100,38 @@ ul.lst li a{color:var(--accent);word-break:break-all}
 .link:disabled{opacity:.5;text-decoration:none}
 .login .err{min-height:1.2em;color:#f08a72}
 .ver{font-family:var(--mono);font-size:.7rem;color:var(--lmuted);text-align:center;margin-top:14px}
+/* shell con menú */
+.topbar{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;justify-content:space-between;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.brandbar{font-weight:700;font-size:1.1rem;letter-spacing:-.01em}
+.brandbar span{color:var(--muted);font-weight:500}
+nav.menu{display:flex;flex-wrap:wrap;gap:4px}
+nav.menu a{font-size:.85rem;font-weight:500;padding:7px 12px;border-radius:6px;color:var(--muted);text-decoration:none;border:1px solid transparent}
+nav.menu a:hover{color:var(--fg);background:var(--panel)}
+nav.menu a.on{color:var(--accent-ink);background:var(--accent);border-color:var(--accent)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:grid;gap:2px;font-variant-numeric:tabular-nums}
+.tile b{font-size:1.6rem;font-weight:600;line-height:1.1}
+.tile span{font-size:.74rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.tile small{font-size:.78rem;color:var(--muted)}
+table.t{width:100%;border-collapse:collapse;font-size:.85rem;font-variant-numeric:tabular-nums}
+table.t th{text-align:left;font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line)}
+table.t td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+table.t td.k{font-family:var(--mono);font-size:.78rem;word-break:break-all}
+.tw{overflow-x:auto}
+.fav{background:none;border:0;cursor:pointer;font-size:1.05rem;line-height:1;color:var(--muted);padding:0 2px}
+.fav.on{color:#e0a500}
+.gc{position:relative}
+.gc .fav{position:absolute;top:6px;right:6px;background:var(--panel);border-radius:999px;padding:3px 6px;border:1px solid var(--line)}
+textarea{font:inherit;font-family:var(--mono);font-size:.82rem;width:100%;min-height:160px;padding:10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);resize:vertical}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.sys{display:grid;gap:8px}
+.sys .r{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:baseline;font-size:.88rem}
+.sys .r .n{min-width:14ch;color:var(--muted)}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--line);vertical-align:middle;margin-right:6px}
+.dot.ok{background:var(--ok)}.dot.warn{background:var(--warn)}.dot.bad{background:var(--miss)}
+.seg{display:flex;gap:4px}
+.seg button{padding:6px 10px;font-size:.82rem}
+.seg button.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 /* galería */
 .gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
 .gc{margin:0;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}
@@ -145,84 +177,134 @@ ul.lst li a{color:var(--accent);word-break:break-all}
 
 <!-- APP -->
 <div class="wrap" id="vApp" hidden>
-  <header class="top">
-    <div><h1>ARKAPHOTO</h1><p class="sub">Sube los lotes del generador, detecta las posiciones faltantes y tráelas de tu ruta pública.</p></div>
-    <div class="row"><span class="who" id="who"></span><span class="pill warn" id="verChip"></span><a class="btnlink" href="#galeria" target="_blank" rel="noopener">Galería ↗</a><button class="quiet" id="btnSalir">Salir</button></div>
+  <header class="topbar">
+    <div class="brandbar">ARKAPHOTO <span>· elothe.dev</span></div>
+    <nav class="menu" id="menu">
+      <a href="#inicio" data-v="inicio">Inicio</a>
+      <a href="#galerias" data-v="galerias">Galerías</a>
+      <a href="#carga" data-v="carga">Carga fotos</a>
+      <a href="#urls" data-v="urls">Carga de URL</a>
+      <a href="#admin" data-v="admin">Admin</a>
+    </nav>
+    <div class="row"><span class="who" id="who"></span><span class="pill warn" id="verChip"></span><button class="quiet" id="btnSalir">Salir</button></div>
   </header>
 
-  <section class="panel">
-    <details id="cfg">
-      <summary>Configuración</summary>
-      <form class="row" style="margin-top:12px" id="fCfg">
-        <label class="f grow">Ruta pública (AWS)
-          <input type="text" id="baseUrl" placeholder="https://mi-bucket.s3.amazonaws.com/carpeta" spellcheck="false">
-        </label>
-        <label class="f" style="flex:0 1 220px">Rango esperado
-          <select id="rango">
-            <option value="16">Bloques de 16 (1–16 o 1–32)</option>
-            <option value="32">Siempre 1–32</option>
-          </select>
-        </label>
-        <button type="submit">Guardar</button>
-      </form>
-      <p class="note" style="margin-top:8px">La URL de cada faltante se arma como <span class="key">{ruta}/{archivo}</span>. Se guarda en tu cuenta.</p>
-    </details>
+  <!-- INICIO -->
+  <section id="v-inicio" data-view hidden>
+    <div class="tiles" style="margin-bottom:18px">
+      <div class="tile"><b id="dFotos">0</b><span>fotos</span><small id="dFotosSub"></small></div>
+      <div class="tile"><b id="dEspacio">0</b><span>espacio ocupado</span><small id="dEspacioSub"></small></div>
+      <div class="tile"><b id="dCosto">—</b><span>costo aprox. / mes</span><small id="dCostoSub"></small></div>
+      <div class="tile"><b id="dFav">0</b><span>favoritas</span><small id="dFavSub"></small></div>
+    </div>
+    <div class="panel">
+      <h2>Lotes</h2>
+      <div class="tw"><table class="t"><thead><tr><th>Lote</th><th>Cargadas</th><th>Traídas</th><th>Faltan</th><th>Espacio</th><th>Estado</th></tr></thead><tbody id="dLotes"></tbody></table></div>
+    </div>
   </section>
 
-  <section>
+  <!-- GALERÍAS -->
+  <section id="v-galerias" data-view hidden>
+    <div class="row" style="justify-content:space-between;margin-bottom:14px">
+      <div class="seg" id="galFiltro"><button class="on" data-f="todos">Todos</button><button data-f="fav">Favoritas</button><button data-f="incompletos">Incompletos</button></div>
+      <span class="note" id="galStats"></span>
+    </div>
+    <div id="galBody"></div>
+  </section>
+
+  <!-- CARGA FOTOS -->
+  <section id="v-carga" data-view hidden>
     <label class="drop" id="drop" tabindex="0">
       <input type="file" id="files" multiple accept=".jpg,.jpeg,.png,image/jpeg,image/png">
       <strong>Arrastra aquí o haz clic para elegir</strong><br>
       Formato: <span class="key">1790023723-97bc931c14c0c7ef41258f2206c04e91-16.jpg</span> (secuencia 1 a 32; acepta copias "(1)")
     </label>
     <p class="note" id="upStatus" style="margin-top:8px"></p>
-  </section>
 
-  <section class="panel" id="resumen" hidden>
-    <div class="stats">
-      <div><b id="sArch">0</b><span>imágenes</span></div>
-      <div><b id="sLotes">0</b><span>lotes</span></div>
-      <div><b id="sFalt">0</b><span>faltantes</span></div>
-      <div><b id="sDup">0</b><span>duplicados (n)</span></div>
-      <div><b id="sBad">0</b><span>no reconocidos</span></div>
-    </div>
-  </section>
-
-  <section class="panel" id="lotes" hidden></section>
-
-  <section class="panel ask" id="pregunta" hidden>
-    <p id="preguntaTxt"></p>
-    <button class="primary" id="btnSi">Sí, validar</button>
-    <button id="btnNo">No, por ahora</button>
-  </section>
-
-  <section class="panel" id="faltantes" hidden>
-    <div class="row" style="justify-content:space-between;margin-bottom:10px">
-      <h2 style="margin:0">Faltantes en la ruta pública</h2>
-      <div class="row">
-        <button id="btnCopiar">Copiar lista</button>
-        <button class="primary" id="btnTraer">TRAER a ARKAPHOTO</button>
+    <section class="panel" id="resumen" hidden style="margin-top:18px">
+      <div class="stats">
+        <div><b id="sArch">0</b><span>imágenes</span></div>
+        <div><b id="sLotes">0</b><span>lotes</span></div>
+        <div><b id="sFalt">0</b><span>faltantes</span></div>
+        <div><b id="sDup">0</b><span>duplicados (n)</span></div>
+        <div><b id="sBad">0</b><span>no reconocidos</span></div>
       </div>
+    </section>
+    <section class="panel" id="lotes" hidden style="margin-top:18px"></section>
+    <section class="panel ask" id="pregunta" hidden style="margin-top:18px">
+      <p id="preguntaTxt"></p>
+      <button class="primary" id="btnSi">Sí, validar</button>
+      <button id="btnNo">No, por ahora</button>
+    </section>
+    <section class="panel" id="faltantes" hidden style="margin-top:18px">
+      <div class="row" style="justify-content:space-between;margin-bottom:10px">
+        <h2 style="margin:0">Faltantes en la ruta pública</h2>
+        <div class="row"><button id="btnCopiar">Copiar lista</button><button class="primary" id="btnTraer">TRAER a ARKAPHOTO</button></div>
+      </div>
+      <ul class="lst" id="missList"></ul>
+      <p class="note" id="traerTxt" style="margin-top:12px;white-space:pre-line"></p>
+    </section>
+    <section class="panel" id="dupSec" hidden style="margin-top:18px">
+      <h2>Duplicados con (n) y cómo se resolvieron</h2>
+      <ul class="lst" id="dupList"></ul>
+    </section>
+    <section class="panel" id="noRec" hidden style="margin-top:18px">
+      <h2>No reconocidos (no siguen el patrón)</h2>
+      <div id="badList" class="bad"></div>
+    </section>
+  </section>
+
+  <!-- CARGA DE URL -->
+  <section id="v-urls" data-view hidden>
+    <div class="panel">
+      <h2>URLs a traer</h2>
+      <p class="note" style="margin-bottom:8px">Una URL por línea (https). Se toma el nombre del archivo de la URL; antes de descargar se revisa si esa posición ya existe en el sistema.</p>
+      <textarea id="urlsTxt" placeholder="https://mi-bucket.s3.amazonaws.com/carpeta/1790023723-97bc931c14c0c7ef41258f2206c04e91-16.jpg"></textarea>
+      <div class="row" style="margin-top:10px"><button class="primary" id="btnAnalizar">Analizar</button><button id="btnTraerUrls" disabled>Traer nuevas</button><span class="note" id="urlsResumen"></span></div>
     </div>
-    <ul class="lst" id="missList"></ul>
-    <p class="note" id="traerTxt" style="margin-top:12px"></p>
+    <div class="panel" id="urlsTabla" hidden style="margin-top:18px">
+      <div class="tw"><table class="t"><thead><tr><th>#</th><th>Archivo</th><th>Lote</th><th>Seq</th><th>Estado</th></tr></thead><tbody id="urlsBody"></tbody></table></div>
+    </div>
   </section>
 
-  <section class="panel" id="dupSec" hidden>
-    <h2>Duplicados con (n) y cómo se resolvieron</h2>
-    <ul class="lst" id="dupList"></ul>
-  </section>
+  <!-- ADMIN -->
+  <section id="v-admin" data-view hidden>
+    <div class="panel">
+      <h2>Configuración</h2>
+      <form class="row" id="fCfg">
+        <label class="f grow">Ruta pública (AWS)
+          <input type="text" id="baseUrl" placeholder="https://mi-bucket.s3.amazonaws.com/carpeta" spellcheck="false">
+        </label>
+        <label class="f" style="flex:0 1 220px">Rango esperado
+          <select id="rango"><option value="16">Bloques de 16 (1–16 o 1–32)</option><option value="32">Siempre 1–32</option></select>
+        </label>
+        <label class="f" style="flex:0 1 140px">Tarifa USD / GB-mes
+          <input type="text" id="tarifa" inputmode="decimal">
+        </label>
+        <label class="f" style="flex:0 1 140px">GB incluidos
+          <input type="text" id="gbInc" inputmode="decimal">
+        </label>
+        <button type="submit">Guardar</button>
+      </form>
+      <p class="note" style="margin-top:8px">La URL de cada faltante se arma como <span class="key">{ruta}/{archivo}</span>. Tarifa por default: Supabase Storage (US$0.021/GB-mes; Free incluye 1 GB, Pro 100 GB).</p>
+    </div>
 
-  <section class="panel" id="noRec" hidden>
-    <h2>No reconocidos (no siguen el patrón)</h2>
-    <div id="badList" class="bad"></div>
-  </section>
-</div>
+    <div class="panel" style="margin-top:18px">
+      <div class="row" style="justify-content:space-between;margin-bottom:10px"><h2 style="margin:0">Sistema</h2><button id="btnSistema">Verificar ahora</button></div>
+      <div class="sys" id="sysBody"><div class="r"><span class="n">Sin verificar</span></div></div>
+    </div>
 
-<!-- GALERÍA -->
-<div class="wrap" id="vGal" hidden>
-  <header class="top"><h1>ARKAPHOTO · galería</h1><span class="who" id="galStats"></span></header>
-  <div id="galBody"></div>
+    <div class="panel" style="margin-top:18px">
+      <h2>Migraciones</h2>
+      <div class="tw"><table class="t"><thead><tr><th>#</th><th>Nombre</th><th>Versión</th><th>Aplicada</th></tr></thead><tbody id="migBody"></tbody></table></div>
+    </div>
+
+    <div class="panel" style="margin-top:18px">
+      <div class="row" style="justify-content:space-between;margin-bottom:10px"><h2 style="margin:0">Validación de archivos</h2><button id="btnValidar">Comparar registro vs bucket</button></div>
+      <p class="note" id="valResumen">Compara cada fila de <span class="key">arkaphoto_imagenes</span> con los objetos del bucket, lote por lote.</p>
+      <ul class="lst" id="valList" style="margin-top:10px"></ul>
+    </div>
+  </section>
 </div>
 
 <div class="toast" id="toast"></div>
