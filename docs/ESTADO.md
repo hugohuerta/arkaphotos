@@ -1,6 +1,6 @@
 # ESTADO · ARKAPHOTO
 
-Sesión: ARKAPHOTO — organizador de lotes · Versión: v0.12.0 · Última migración: 11 (`supabase/11_dimensiones.sql`) · Actualizado: 2026-10-29
+Sesión: ARKAPHOTO — organizador de lotes · Versión: v0.13.0 · Última migración: 12 (`supabase/12_cola.sql`) · Actualizado: 2026-10-29
 
 ## 1. Qué es
 Organizador personal de imágenes de un generador. Sube lotes `<ts>-<hash>-<seq>.<ext>` (seq 1–32), detecta posiciones faltantes, las trae de una ruta pública (AWS) y guarda todo en Supabase Storage. Un solo usuario.
@@ -22,6 +22,7 @@ Organizador personal de imágenes de un generador. Sube lotes `<ts>-<hash>-<seq>
 - 2026-10-29 · Fecha de lote = timestamp de la clave (segundos Unix; si viene en ms también se interpreta). Es la única fecha disponible: no se guarda fecha de carga por lote.
 - 2026-10-29 · Carga: tras subir, los lotes de la sesión aparecen con casilla (marcados por default) y un panel para aplicarles Tipo/Subgrupo/Detalle (sobrescribe si ya tenían); los masivos en Histórico igual. Los niveles son opcionales: se guarda el más profundo elegido.
 - 2026-10-30 · Formato de foto = proporción más cercana entre 1:1, 16:9, 9:16, 4:3, 3:4 con tolerancia 6 %; fuera de eso "otro". Las fotos ya existentes se miden en el navegador al abrir Galerías (40 por visita) y se guardan.
+- 2026-10-30 · Cola de descarga: `arkaphoto_cola` guarda cada URL con estado (pendiente/procesando/traida/existe/error), intentos (máx 3), bytes y archivo de origen; única por (user, lote, seq). `/api/cola` procesa hasta 24 por llamada con 4 descargas en paralelo y presupuesto de 45 s; el navegador llama en bucle mientras esté abierto; "procesando" huérfanas de >5 min se retoman. El export de photoai trae URLs envueltas en resizeapi (720 px): se desenvuelven y se trae el original de r2-us-west.photoai.com. Prueba local con los archivos de Hugo: TXT 136 URLs/134 lotes; JSON 23,250 URLs/23,246 reconocidas/1,619 lotes.
 - 2026-10-29 · Single-file con excepción: el JS vive en `public/app.js` porque la CSP no permite script inline.
 - 2026-10-29 · Login: código de 8 dígitos generado en `/api/auth/send`, enviado por Resend; Supabase solo emite la sesión (`generateLink` → `verifyOtp` con `token_hash`).
 - 2026-10-29 · Protocolo de entrega adaptado en `CLAUDE.md` (single-file; funciones Vercel en lugar de Edge).
@@ -29,7 +30,7 @@ Organizador personal de imágenes de un generador. Sube lotes `<ts>-<hash>-<seq>
 ## 2. Estado por pieza
 | Pieza | Versión | Estado |
 |---|---|---|
-| `public/index.html` + `public/app.js` | v0.12.0 | clasificación en Admin; editor por galería; etiquetas de lote |
+| `public/index.html` + `public/app.js` | v0.13.0 | clasificación en Admin; editor por galería; etiquetas de lote |
 | `api/*` | v0.4.0 | `/api/traer` acepta lote+seqs o urls[] |
 | `api/auth/*` | v0.3.2 | login real confirmado por Hugo (2026-10-29 22:43) |
 | mig 01, 02 | — | aplicadas (2910.1, verificado por el chat vía MCP) |
@@ -42,6 +43,7 @@ Organizador personal de imágenes de un generador. Sube lotes `<ts>-<hash>-<seq>
 | mig 09 | — | aplicada por el chat vía MCP (2910.13): imagenes.oculta, lotes.portada_seq |
 | mig 10 | — | aplicada por el chat vía MCP (3010.1): lotes.tamano, sondeado_en |
 | mig 11 | — | aplicada por el chat vía MCP: imagenes.ancho, alto |
+| mig 12 | — | aplicada por el chat vía MCP (3010.3): arkaphoto_cola + arkaphoto_cola_resumen() |
 
 ## 3.5 Asumidos
 - [asumido] 2026-10-29 · variables de Vercel configuradas: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, RESEND_API_KEY, RESEND_FROM (el proyecto de Vercel no es visible desde el MCP del chat).
@@ -49,7 +51,8 @@ Organizador personal de imágenes de un generador. Sube lotes `<ts>-<hash>-<seq>
 - [asumido] 2026-10-29 · la ruta pública de AWS sirve los archivos sin firma (si no, TRAER devuelve 403 en todo).
 
 ## 3.6 Siguientes pasos
-1. Respaldo del bucket a un segundo destino (rclone → R2/B2/NAS Synology), programado.
+1. Respaldo del bucket a un segundo destino (rclone → R2/B2/NAS Synology), programado. Con ~23k fotos de photoai en camino, decidir antes si el destino principal sigue en Supabase Storage o pasa a R2 (egress).
+1b. Procesamiento de la cola sin navegador abierto (cron de Vercel o Edge Function programada); hoy requiere la pestaña abierta.
 2. Primer TRAER real (ruta pública o lista de URLs) y registrar el resultado.
 3. Borrado suave (`eliminado_en`) y borrar desde Galerías.
 4. Compartir: URL firmada larga explícita por imagen.

@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-const CFG = { VERSION: '0.12.0', MIGRACION_ESPERADA: 11, URL_TTL: 3600 };
+const CFG = { VERSION: '0.13.0', MIGRACION_ESPERADA: 12, URL_TTL: 3600 };
 const $ = id => document.getElementById(id);
 const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
 const MAX = 32, BUCKET = 'arkaphoto';
@@ -50,6 +50,7 @@ async function route(){
   if(v==='galerias'){ renderGalerias(); completarDimensiones(); }
   if(v==='carga') mostrarCargaTab(cargaTab);
   if(v==='admin') { renderArbol(); renderAdminTags(); mostrarTab(adminTab); }
+  if(v==='urls') colaEstado();
 }
 window.addEventListener('hashchange', route);
 sb.auth.onAuthStateChange((ev)=>{ if(ev==='SIGNED_OUT') show('vLogin'); });
@@ -635,46 +636,101 @@ $('btnTraer').addEventListener('click', async ()=>{
 });
 const describeFalla = x => x.status==='existe'?'ya existe en el sistema':x.status==='omitida'?`omitida (${x.error})`:x.status===404?'no existe en la ruta':`HTTP ${x.status}${x.error?' '+x.error:''}`;
 
-// ---------- CARGA DE URL
-let urlsNuevas = [];
-$('btnAnalizar').addEventListener('click', ()=>{
-  const lineas=[...new Set($('urlsTxt').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean))];
-  const filas=[]; urlsNuevas=[]; const vistos=new Set();
+// ---------- CARGA DE URL (texto o archivo .txt/.json) → análisis → cola persistente
+let urlsNuevas = [], archivoNombre = '';
+const RX_URL = /https?:\/\/[^\s"'<>\\\]\[,]+?\.(?:png|jpe?g)/gi;
+// Desenvuelve proxies de redimensión: la última aparición de http(s):// dentro de la URL es el original
+const desenvolver = u => { const i=Math.max(u.lastIndexOf('https://'), u.lastIndexOf('http://')); return i>0 ? u.slice(i) : u; };
+function extraerUrls(texto){
+  const set=new Set();
+  let m; RX_URL.lastIndex=0;
+  while((m=RX_URL.exec(texto))) set.add(desenvolver(m[0]));
+  return [...set];
+}
+$('urlsFile').addEventListener('change', async e=>{
+  const f=e.target.files[0]; if(!f) return; archivoNombre=f.name;
+  const texto=await f.text(); let urls=[];
+  if(f.name.toLowerCase().endsWith('.json')){ try{ const j=JSON.parse(texto); const walk=o=>{ if(typeof o==='string') urls.push(o); else if(Array.isArray(o)) o.forEach(walk); else if(o&&typeof o==='object') Object.values(o).forEach(walk); }; walk(j); }catch{ urls=[]; } }
+  if(!urls.length) urls=extraerUrls(texto); else urls=[...new Set(urls.flatMap(u=>extraerUrls(u)))];
+  $('urlsTxt').value=urls.join('\n'); $('urlsFileN').textContent=`${f.name}: ${urls.length} URLs`; e.target.value='';
+  $('btnAnalizar').click();
+});
+async function colaIndices(){
+  const { data } = await sb.from('arkaphoto_cola').select('lote,seq,estado');
+  const m=new Map(); (data||[]).forEach(r=>m.set(`${r.lote}-${r.seq}`, r.estado)); return m;
+}
+$('btnAnalizar').addEventListener('click', async ()=>{
+  const lineas=extraerUrls($('urlsTxt').value);
+  const enCola=await colaIndices();
+  const filas=[]; urlsNuevas=[]; const vistos=new Set(); const c={tot:lineas.length,nueva:0,existe:0,cola:0,rep:0,bad:0};
   lineas.forEach((u,i)=>{
     let nombreArch='', lote='', seq='', estado='', ok=false;
     try{
       const url=new URL(u); nombreArch=decodeURIComponent(url.pathname.split('/').pop()||'');
       const m=nombreArch.match(RX);
-      if(url.protocol!=='https:') estado='solo https';
-      else if(!m) estado='nombre no reconocido';
+      if(url.protocol!=='https:') { estado='solo https'; c.bad++; }
+      else if(!m) { estado='nombre no reconocido'; c.bad++; }
       else {
-        lote=`${m[1]}-${m[2].toLowerCase()}`; seq=parseInt(m[3],10);
-        const k=`${lote}-${seq}`;
-        if(seq<1||seq>32) estado='secuencia fuera de 1–32';
-        else if(lotes.get(lote)?.items.has(seq)) estado='ya existe en el sistema';
-        else if(vistos.has(k)) estado='repetida en la lista';
-        else { estado='nueva'; ok=true; vistos.add(k); urlsNuevas.push(u); }
+        lote=`${m[1]}-${m[2].toLowerCase()}`; seq=parseInt(m[3],10); const k=`${lote}-${seq}`;
+        if(seq<1||seq>32){ estado='secuencia fuera de 1–32'; c.bad++; }
+        else if(lotes.get(lote)?.items.has(seq)){ estado='ya existe en el sistema'; c.existe++; }
+        else if(vistos.has(k)){ estado='repetida en la lista'; c.rep++; }
+        else if(enCola.has(k)){ estado='ya en cola ('+enCola.get(k)+')'; c.cola++; vistos.add(k); }
+        else { estado='nueva'; ok=true; vistos.add(k); c.nueva++; urlsNuevas.push({url:u,lote,seq,ext:m[5].toLowerCase(),nombre:`${lote}-${seq}.${m[5].toLowerCase()}`}); }
       }
-    }catch{ estado='URL inválida'; }
-    filas.push(`<tr><td>${i+1}</td><td class="k">${esc(nombreArch||u)}</td><td class="k">${esc(lote)}</td><td>${esc(seq)}</td><td><span class="pill ${ok?'ok':estado.startsWith('ya')?'warn':'miss'}">${esc(estado)}</span></td></tr>`);
+    }catch{ estado='URL inválida'; c.bad++; }
+    if(filas.length<300) filas.push(`<tr><td>${i+1}</td><td class="k">${esc(nombreArch||u)}</td><td class="k">${esc(lote)}</td><td>${esc(seq)}</td><td><span class="pill ${ok?'ok':estado.startsWith('ya')?'warn':'miss'}">${esc(estado)}</span></td></tr>`);
   });
-  $('urlsBody').innerHTML=filas.join(''); $('urlsTabla').hidden=!filas.length;
-  $('urlsResumen').textContent=`${lineas.length} URLs · ${urlsNuevas.length} nuevas`;
-  $('btnTraerUrls').disabled=!urlsNuevas.length;
+  $('uTot').textContent=c.tot; $('uNew').textContent=c.nueva; $('uEx').textContent=c.existe; $('uCola').textContent=c.cola; $('uRep').textContent=c.rep; $('uBad').textContent=c.bad;
+  $('urlsStats').hidden=!c.tot;
+  $('urlsBody').innerHTML=filas.join(''); $('urlsTabla').hidden=!filas.length; $('urlsTablaN').textContent = lineas.length>300?`Se muestran las primeras 300 de ${lineas.length}.`:'';
+  $('urlsResumen').textContent=`${c.tot} URLs · ${c.nueva} nuevas`;
+  $('btnEncolar').disabled=!urlsNuevas.length; $('btnEncolar').textContent=`Encolar ${urlsNuevas.length} nuevas`;
 });
-$('btnTraerUrls').addEventListener('click', async ()=>{
-  $('btnTraerUrls').disabled=true; $('urlsResumen').textContent=`Trayendo ${urlsNuevas.length}…`;
-  const r = await post('/api/traer',{urls:urlsNuevas},true);
-  if(!r.ok){ $('urlsResumen').textContent='Error: '+(r.j.error||r.status); $('btnTraerUrls').disabled=false; return; }
-  const porUrl=new Map(r.j.resultados.map(x=>[x.url,x]));
-  document.querySelectorAll('#urlsBody tr').forEach(tr=>{
-    const u=[...tr.querySelectorAll('td')][1]; const x=[...porUrl.values()].find(x=>u.textContent===decodeURIComponent(new URL(x.url).pathname.split('/').pop()||''));
-    if(!x) return; const pill=tr.querySelector('.pill');
-    pill.className='pill '+(x.ok?'ok':'miss'); pill.textContent = x.ok?`traída (${fmt(x.bytes)})`:describeFalla(x);
-  });
-  $('urlsResumen').textContent=`Traídas: ${r.j.traidas} de ${urlsNuevas.length}`;
-  await cargarImagenes(); urlsNuevas=[];
+$('btnEncolar').addEventListener('click', async ()=>{
+  $('btnEncolar').disabled=true; let n=0;
+  for(let i=0;i<urlsNuevas.length;i+=500){
+    const tanda=urlsNuevas.slice(i,i+500).map(x=>({ ...x, user_id:session.user.id, origen_archivo:archivoNombre||null }));
+    const { error } = await sb.from('arkaphoto_cola').upsert(tanda, { onConflict:'user_id,lote,seq', ignoreDuplicates:true });
+    if(error){ toast('Encolar: '+error.message); break; }
+    n+=tanda.length; $('urlsResumen').textContent=`Encolando… ${n} de ${urlsNuevas.length}`;
+  }
+  toast(`${n} URLs en cola`); urlsNuevas=[]; $('urlsResumen').textContent=`${n} encoladas`; await colaEstado();
 });
+
+// ---------- cola: estado y procesamiento en bucle
+let colaCorriendo=false, colaTotalInicial=0;
+async function colaEstado(){
+  const { data, error } = await sb.rpc('arkaphoto_cola_resumen'); if(error){ $('colaTxt').textContent='Cola: '+error.message; return null; }
+  const m=Object.fromEntries((data||[]).map(r=>[r.estado,{n:Number(r.n),bytes:Number(r.bytes)}]));
+  const g=k=>m[k]?.n||0; const pend=g('pendiente')+g('procesando'), tra=g('traida'), ex=g('existe'), err=g('error');
+  $('cPend').textContent=pend; $('cTra').textContent=tra; $('cEx').textContent=ex; $('cErr').textContent=err; $('cBytes').textContent=fmt(m.traida?.bytes||0);
+  const total=pend+tra+ex+err, hechas=tra+ex+err, pct=total?Math.round(100*hechas/total):0;
+  $('colaBarra').querySelector('i').style.width=pct+'%'; $('colaBarra').classList.toggle('full',total>0&&pend===0);
+  $('colaBarraTxt').textContent = total?`${hechas} de ${total} · ${pct}%${colaCorriendo?' · procesando…':pend?' · en pausa':' · terminada'}`:'sin cola';
+  $('btnColaIr').hidden=colaCorriendo||!pend; $('btnColaPausa').hidden=!colaCorriendo;
+  if(err){ const { data: errs } = await sb.from('arkaphoto_cola').select('nombre,error,http_status').eq('estado','error').order('procesado_en',{ascending:false}).limit(20);
+    $('colaErrores').innerHTML=(errs||[]).map(x=>`<li><span class="n">!</span><span>${esc(x.nombre)}</span><span class="note">${esc(x.error||x.http_status||'')}</span></li>`).join(''); }
+  else $('colaErrores').innerHTML='';
+  return { pend, tra, ex, err, total };
+}
+async function colaBucle(){
+  colaCorriendo=true; await colaEstado();
+  while(colaCorriendo){
+    const r=await post('/api/cola',{ accion:'procesar', n:24 },true);
+    if(!r.ok){ toast('Cola: '+(r.j.error||r.status)); break; }
+    $('colaTxt').textContent=`Última tanda: ${r.j.procesadas} procesadas · ${r.j.traidas||0} traídas · ${r.j.existe||0} existían · ${r.j.error||0} errores · ${((r.j.ms||0)/1000).toFixed(1)} s`;
+    const e=await colaEstado();
+    if(r.j.fin || !e || !e.pend) break;
+    if(vistaActual()==='galerias'){ await cargarImagenes(); renderGalerias(); }
+  }
+  colaCorriendo=false; await colaEstado();
+  if(lotes.size!==undefined){ await cargarImagenes(); if(vistaActual()==='galerias') renderGalerias(); }
+}
+$('btnColaIr').addEventListener('click', ()=>{ if(!colaCorriendo) colaBucle(); });
+$('btnColaPausa').addEventListener('click', ()=>{ colaCorriendo=false; $('colaTxt').textContent='Pausando al terminar la tanda actual…'; });
+$('btnColaRetry').addEventListener('click', async ()=>{ const r=await post('/api/cola',{ accion:'reintentar' },true); toast(r.ok?`${r.j.reencoladas} reencoladas`:(r.j.error||r.status)); await colaEstado(); });
+$('btnColaLimpiar').addEventListener('click', async ()=>{ const r=await post('/api/cola',{ accion:'limpiar' },true); toast(r.ok?`${r.j.borradas} filas borradas`:(r.j.error||r.status)); await colaEstado(); });
 
 // ---------- ADMIN · pestañas (Sistema verifica solo al abrirse)
 let adminTab = 'url'; try{ adminTab = localStorage.getItem('arkaphoto-admin-tab') || 'url'; }catch{}
@@ -763,7 +819,7 @@ async function verificarSistema(){
     fila('/api/version', j.version===CFG.VERSION?'ok':'warn', `backend v${j.version} (header ${h||'—'}) · frontend v${CFG.VERSION}`);
     fila('migración', j.migracion_aplicada===CFG.MIGRACION_ESPERADA?'ok':j.migracion_aplicada>CFG.MIGRACION_ESPERADA?'warn':'bad', `aplicada ${j.migracion_aplicada ?? '?'} · esperada ${CFG.MIGRACION_ESPERADA}`);
   }catch(e){ fila('/api/version','bad','sin respuesta: '+e.message); }
-  for(const ep of ['/api/config','/api/auth/send','/api/auth/verify','/api/traer','/api/sondear']){
+  for(const ep of ['/api/config','/api/auth/send','/api/auth/verify','/api/traer','/api/sondear','/api/cola']){
     try{ const r=await fetch(ep,{method:ep==='/api/config'?'GET':'POST',headers:{'Content-Type':'application/json'},body:ep==='/api/config'?undefined:'{}'}); const h=r.headers.get('x-app-version');
       fila(ep, h===CFG.VERSION?'ok':h?'warn':'bad', h?`v${h}`:'sin x-app-version'); }catch(e){ fila(ep,'bad','sin respuesta'); }
   }

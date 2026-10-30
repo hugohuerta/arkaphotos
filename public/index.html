@@ -1,4 +1,4 @@
-<!-- ARKAPHOTO v0.12.0 -->
+<!-- ARKAPHOTO v0.13.0 -->
 <!doctype html>
 <html lang="es">
 <head>
@@ -406,12 +406,41 @@ section.panel.col .cover{display:block}
   <section id="v-urls" data-view hidden>
     <div class="panel">
       <h2>URLs a traer</h2>
-      <p class="note" style="margin-bottom:8px">Una URL por línea (https). Se toma el nombre del archivo de la URL; antes de descargar se revisa si esa posición ya existe en el sistema.</p>
-      <textarea id="urlsTxt" placeholder="https://mi-bucket.s3.amazonaws.com/carpeta/1790023723-97bc931c14c0c7ef41258f2206c04e91-16.jpg"></textarea>
-      <div class="row" style="margin-top:10px"><button class="primary" id="btnAnalizar">Analizar</button><button id="btnTraerUrls" disabled>Traer nuevas</button><span class="note" id="urlsResumen"></span></div>
+      <p class="note" style="margin-bottom:8px">Pega URLs (una por línea) o sube un archivo <b>.txt</b> / <b>.json</b>: se extraen todas las URLs de fotos que contenga. Las envueltas en un proxy de redimensión (resizeapi) se desenvuelven para traer el original. Antes de descargar se revisa lo que ya existe o ya está en la cola.</p>
+      <div class="row" style="margin-bottom:8px"><label class="btnlink" for="urlsFile">📄 Subir archivo .txt / .json</label><input type="file" id="urlsFile" accept=".txt,.json,text/plain,application/json" style="display:none"><span class="note" id="urlsFileN"></span></div>
+      <textarea id="urlsTxt" placeholder="https://r2-us-west.photoai.com/1790023723-97bc931c14c0c7ef41258f2206c04e91-16.png"></textarea>
+      <div class="row" style="margin-top:10px"><button class="primary" id="btnAnalizar">Analizar</button><button id="btnEncolar" disabled>Encolar nuevas</button><span class="note" id="urlsResumen"></span></div>
+    </div>
+    <div class="panel" id="urlsStats" hidden style="margin-top:18px">
+      <div class="stats">
+        <div><b id="uTot">0</b><span>URLs</span></div>
+        <div><b id="uNew">0</b><span>nuevas</span></div>
+        <div><b id="uEx">0</b><span>ya existen</span></div>
+        <div><b id="uCola">0</b><span>ya en cola</span></div>
+        <div><b id="uRep">0</b><span>repetidas</span></div>
+        <div><b id="uBad">0</b><span>no reconocidas</span></div>
+      </div>
     </div>
     <div class="panel" id="urlsTabla" hidden style="margin-top:18px">
+      <p class="note" id="urlsTablaN" style="margin-bottom:8px"></p>
       <div class="tw"><table class="t"><thead><tr><th>#</th><th>Archivo</th><th>Lote</th><th>Seq</th><th>Estado</th></tr></thead><tbody id="urlsBody"></tbody></table></div>
+    </div>
+
+    <div class="panel" style="margin-top:18px">
+      <div class="row" style="justify-content:space-between;margin-bottom:10px">
+        <h2 style="margin:0">Cola de descarga</h2>
+        <div class="row"><button class="primary" id="btnColaIr">▶ Procesar</button><button id="btnColaPausa" hidden>⏸ Pausar</button><button id="btnColaRetry">Reintentar errores</button><button class="quiet" id="btnColaLimpiar">Limpiar terminadas</button></div>
+      </div>
+      <div id="colaBarra" class="prog" style="min-width:100%;height:30px;margin-bottom:10px"><i style="width:0"></i><b id="colaBarraTxt">sin cola</b></div>
+      <div class="stats">
+        <div><b id="cPend">0</b><span>pendientes</span></div>
+        <div><b id="cTra">0</b><span>traídas</span></div>
+        <div><b id="cEx">0</b><span>ya existían</span></div>
+        <div><b id="cErr">0</b><span>errores</span></div>
+        <div><b id="cBytes">0</b><span>descargado</span></div>
+      </div>
+      <p class="note" id="colaTxt" style="margin-top:10px">La cola queda guardada: si cierras el navegador, al volver continúa donde se quedó.</p>
+      <ul class="lst" id="colaErrores" style="margin-top:10px"></ul>
     </div>
   </section>
 
