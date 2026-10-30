@@ -1,0 +1,11 @@
+{
+  "name": "arkaphoto",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Organizador de lotes de imágenes: Supabase Auth (OTP) + Storage, funciones en Vercel",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4"
+  },
+  "engines": { "node": ">=20" }
+}
