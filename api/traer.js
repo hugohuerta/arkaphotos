@@ -2,6 +2,7 @@
 // Jala cada faltante desde la ruta pública del usuario y la guarda en el bucket.
 // Corre en servidor para evitar CORS y para usar la service role (nunca va al navegador).
 import { createClient } from '@supabase/supabase-js';
+import { conVersion } from './_version.js';
 
 export const config = { maxDuration: 60 };
 
@@ -10,6 +11,7 @@ const MAX_BYTES = 50 * 1024 * 1024;
 const CONCURRENCIA = 4;
 
 export default async function handler(req, res) {
+  conVersion(res);
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST' });
   const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = process.env;
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return res.status(500).json({ error: 'Faltan variables de Supabase' });
@@ -28,7 +30,13 @@ export default async function handler(req, res) {
 
   const { data: cfg } = await admin.from('arkaphoto_config').select('ruta_publica').eq('user_id', user.id).maybeSingle();
   const base = (cfg?.ruta_publica || '').replace(/\/+$/, '');
-  if (!/^https?:\/\//.test(base)) return res.status(400).json({ error: 'Configura la ruta pública primero' });
+  let host;
+  try { const u = new URL(base); if (u.protocol !== 'https:') throw 0; host = u.hostname; }
+  catch { return res.status(400).json({ error: 'La ruta pública debe ser https://' }); }
+  // Hosts desde los que el servidor acepta descargar (ALLOWED_FETCH_HOSTS="bucket.s3.amazonaws.com,otro.com"; vacío = cualquiera)
+  const hosts = (process.env.ALLOWED_FETCH_HOSTS || '').split(',').map(h => h.trim().toLowerCase()).filter(Boolean);
+  if (hosts.length && !hosts.some(h => host === h || host.endsWith('.' + h)))
+    return res.status(403).json({ error: `El host ${host} no está en ALLOWED_FETCH_HOSTS` });
 
   const resultados = [];
   const cola = lista.slice();

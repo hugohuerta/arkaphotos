@@ -13,13 +13,17 @@ api/auth/send.js         genera código de 8 dígitos, lo guarda hasheado, lo ma
 api/auth/verify.js       valida el código y devuelve token_hash de Supabase para abrir sesión
 api/_auth.js             utilidades compartidas de auth (no es endpoint)
 api/traer.js             jala faltantes de la ruta pública → bucket (usa service role)
-supabase/schema.sql      tablas, RLS, bucket y políticas de Storage
-supabase/002_otp.sql     tabla de códigos de acceso
+supabase/01_inicial.sql  tablas, RLS, bucket y políticas de Storage
+supabase/02_otp.sql      tabla de códigos de acceso
+supabase/03_seguridad.sql bucket privado + arkaphoto_migraciones
+public/app.js            JS de la app (separado del HTML por la CSP)
+api/version.js           { app, version, migracion_esperada, migracion_aplicada }
+vercel.json              cabeceras de seguridad (CSP, HSTS, no-referrer)
 ```
 
 ## 1. Supabase
 
-1. Crear proyecto. SQL Editor → ejecutar `supabase/schema.sql` y luego `supabase/002_otp.sql`.
+1. Crear proyecto. SQL Editor → ejecutar `supabase/01_inicial.sql`, `02_otp.sql` y `03_seguridad.sql` en orden.
 2. **Authentication → Providers → Email**: dejar habilitado (la sesión se abre con un enlace mágico generado en servidor; el correo lo manda Resend, no Supabase).
 3. Copiar de **Project Settings → API**: Project URL, anon key, service_role key.
 
@@ -42,7 +46,8 @@ Variables de entorno del proyecto:
 | `RESEND_FROM` | remitente verificado, `Nombre <correo@dominio>` |
 | `APP_NAME` | opcional, nombre en el correo (default `ARKAPHOTO`) |
 | `OTP_SECRET` | opcional, sal del hash de códigos (default: service key) |
-| `ALLOWED_EMAILS` / `ALLOWED_EMAIL_DOMAINS` | opcional, lista blanca separada por comas; vacío = cualquiera |
+| `ALLOWED_EMAILS` / `ALLOWED_EMAIL_DOMAINS` | lista blanca separada por comas; vacío = cualquiera (**no recomendado**: cualquiera podría gastar tu cuota de Resend) |
+| `ALLOWED_FETCH_HOSTS` | opcional, hosts desde los que `/api/traer` acepta descargar; vacío = cualquiera |
 
 Deploy desde el repo (framework: Other; sin build; output: `public`). Vercel detecta `api/` solo.
 
@@ -63,6 +68,8 @@ vercel
 
 ## Notas
 
-- El bucket es de lectura pública (URLs permanentes); escritura y borrado solo del dueño vía RLS.
+- El bucket es privado: la app pide URLs firmadas (1 h) con sesión; escritura y borrado solo del dueño vía RLS.
+- Vercel → Settings → Deployment Protection: activar para previews (las URLs de preview son públicas por default).
+- Supabase respalda la base de datos, no Storage: programar una copia del bucket a un segundo destino (R2/B2/NAS con rclone).
 - `api/traer.js` corre con `maxDuration = 60`; trae 4 archivos en paralelo y tope de 50 MB por archivo.
 - Si la ruta pública de AWS exige URL firmada o bloquea descargas, todo saldrá "no existe" (HTTP 403).

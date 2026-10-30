@@ -1,8 +1,10 @@
 // POST /api/auth/verify { email, code } → valida el código y devuelve un token_hash de Supabase
 // con el que el navegador abre sesión (supabase.auth.verifyOtp). El código se consume al primer acierto.
 import { admin, normEmail, hashCodigo, MAX_ATTEMPTS, CODE_LEN } from '../_auth.js';
+import { conVersion } from '../_version.js';
 
 export default async function handler(req, res) {
+  conVersion(res);
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST' });
   const email = normEmail(req.body?.email);
   const code = String(req.body?.code || '').replace(/\D/g, '');

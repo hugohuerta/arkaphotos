@@ -2,7 +2,7 @@
 
 Proyecto individual (no forma parte del ecosistema de apps empresariales). Adaptación del "Protocolo de entrega por iteración v1.4": se toma lo que aplica a un sistema de una función con Supabase + Vercel; lo que no aplica se lista al final para no reinterpretarlo cada vez.
 
-Modelo: **single-file** (`public/index.html`) + funciones Vercel en `api/` + migraciones en `supabase/`. Sin build tooling; librerías por CDN con versión fija.
+Modelo: **single-file** (`public/index.html` + `public/app.js`, separado solo porque la CSP no admite script inline) + funciones Vercel en `api/` + migraciones en `supabase/`. Sin build tooling; librerías por CDN con versión fija.
 
 ## 1. Entrega
 
@@ -33,7 +33,7 @@ Alcance: qué cambia y qué no (2–4 líneas).
 ## 2. Archivos
 
 - La versión vive dentro del archivo, nunca en el nombre.
-- `public/index.html`: `CFG.VERSION`, chip visible, comentario `<!-- ARKAPHOTO vX.Y.Z -->` en la línea 1 (solo versión actual; historial en `docs/CAMBIOS.md`).
+- `public/index.html`: comentario `<!-- ARKAPHOTO vX.Y.Z -->` en la línea 1. `public/app.js`: `CFG.VERSION` y `MIGRACION_ESPERADA`. `api/_version.js`: mismos valores para el backend. Los tres suben juntos en cada entrega.
 - Funciones Vercel: `api/<nombre>.js` o `api/<grupo>/<nombre>.js`; exponen `x-app-version` en toda respuesta; `api/version.js` devuelve `{app, version, migracion}`.
 - Migraciones: `supabase/NN_descripcion.sql` (dos dígitos, snake_case). Siempre archivo completo e idempotente.
 - Docs: `docs/ESTADO.md` (estado, decisiones, asumidos, siguientes pasos) y `docs/CAMBIOS.md` (una línea por versión).
