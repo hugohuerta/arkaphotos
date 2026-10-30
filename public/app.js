@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-const CFG = { VERSION: '0.13.2', MIGRACION_ESPERADA: 12, URL_TTL: 3600 };
+const CFG = { VERSION: '0.14.0', MIGRACION_ESPERADA: 12, URL_TTL: 3600 };
 const $ = id => document.getElementById(id);
 const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
 const MAX = 32, BUCKET = 'arkaphoto';
@@ -735,6 +735,14 @@ async function colaBucle(){
   if(lotes.size!==undefined){ await cargarImagenes(); if(vistaActual()==='galerias') renderGalerias(); }
 }
 $('btnColaIr').addEventListener('click', ()=>{ if(!colaCorriendo) colaBucle(); });
+let completando=false;
+$('btnColaCompletar').addEventListener('click', async ()=>{
+  if(completando||colaCorriendo) return; completando=true; $('btnColaCompletar').disabled=true; let lotes_=0, enc=0;
+  try{ while(true){ const r=await post('/api/cola',{ accion:'completar' },true); if(!r.ok){ toast('Completar: '+(r.j.error||r.status)); break; }
+    lotes_+=r.j.lotes; enc+=r.j.encoladas; $('colaTxt').textContent=`Completando lotes: ${lotes_} sondeados · ${enc} fotos encoladas · ${r.j.restantes} lotes por sondear`; await colaEstado(); if(r.j.fin||!r.j.lotes) break; } }
+  finally{ completando=false; $('btnColaCompletar').disabled=false; }
+  toast(`Completar: ${lotes_} lotes, ${enc} fotos nuevas en cola`);
+});
 $('btnColaPausa').addEventListener('click', ()=>{ colaCorriendo=false; $('colaTxt').textContent='Pausando al terminar la tanda actual…'; });
 $('btnColaRetry').addEventListener('click', async ()=>{ const r=await post('/api/cola',{ accion:'reintentar' },true); toast(r.ok?`${r.j.reencoladas} reencoladas`:(r.j.error||r.status)); await colaEstado(); });
 $('btnColaLimpiar').addEventListener('click', async ()=>{ const r=await post('/api/cola',{ accion:'limpiar' },true); toast(r.ok?`${r.j.borradas} filas borradas`:(r.j.error||r.status)); await colaEstado(); });

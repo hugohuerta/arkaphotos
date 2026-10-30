@@ -1,5 +1,6 @@
 # CAMBIOS · ARKAPHOTO
 
+- v0.14.0 — 2026-10-30 — Cola: "Completar lotes" sondea cada lote en la base de su propia URL (32→16→8→4→2) y encola las posiciones que falten, sin depender de la ruta pública configurada
 - v0.13.2 — 2026-10-30 — Histórico: filtro Todos / Incompletos / Completos / Sin clasificar / Sin sondear; "Seleccionar visibles" actúa sobre lo filtrado
 - v0.13.1 — 2026-10-30 — fix: "Sesión inválida" en traer/sondear/cola tras 1 h (token caducado); ahora cada llamada usa el token renovado
 - v0.13.0 — 2026-10-30 — Carga de URL: archivo .txt/.json (extrae y desenvuelve URLs de proxies de redimensión), análisis masivo con conteos (nuevas / existen / en cola / repetidas / no reconocidas), cola persistente (mig 12) procesada por tandas con /api/cola, pausa/reanuda, reintentos y limpieza

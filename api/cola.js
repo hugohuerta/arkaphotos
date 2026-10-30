@@ -38,6 +38,8 @@ export default async function handler(req, res) {
     return res.status(error ? 500 : 200).json(error ? { error: error.message } : { borradas: data.length });
   }
 
+  if (accion === 'completar') return completar(admin, user, res);
+
   const n = Math.min(Math.max(Number(req.body?.n) || 24, 1), 48);
   const inicio = Date.now();
   // Toma pendientes (y "procesando" huérfanas de más de 5 min) y las marca como procesando
@@ -86,4 +88,42 @@ export default async function handler(req, res) {
   await Promise.all(Array.from({ length: Math.min(CONCURRENCIA, lote.length) }, worker));
   const { count } = await admin.from('arkaphoto_cola').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('estado', 'pendiente');
   res.status(200).json({ procesadas: lote.length, ...res_, pendientes: count ?? 0, fin: (count ?? 0) === 0, ms: Date.now() - inicio });
+}
+
+// ---- Completar lotes: para cada lote presente en la cola, sondea su tamaño en la base de su propia URL
+//      (32 → 16 → 8 → 4 → 2; nunca por debajo del mayor seq conocido) y encola las posiciones que falten.
+const ESCALA = [32, 16, 8, 4, 2];
+const pow2 = n => { let p = 1; while (p < n) p *= 2; return Math.min(32, p); };
+async function existe(url) {
+  try { let r = await fetch(url, { method: 'HEAD', redirect: 'follow' });
+    if (r.status === 405 || r.status === 501) r = await fetch(url, { method: 'GET', headers: { Range: 'bytes=0-0' }, redirect: 'follow' });
+    return r.ok; } catch { return false; }
+}
+async function completar(admin, user, res) {
+  const inicio = Date.now();
+  const { data: filas } = await admin.from('arkaphoto_cola').select('lote,seq,ext,url').eq('user_id', user.id).order('id').limit(5000);
+  if (!filas?.length) return res.status(200).json({ lotes: 0, encoladas: 0, restantes: 0, fin: true });
+  const porLote = new Map();
+  for (const f of filas) { if (!porLote.has(f.lote)) porLote.set(f.lote, { ext: f.ext, base: f.url.slice(0, f.url.lastIndexOf('/')), seqs: new Set() }); porLote.get(f.lote).seqs.add(f.seq); }
+  const keys = [...porLote.keys()];
+  const { data: meta } = await admin.from('arkaphoto_lotes').select('lote,sondeado_en').eq('user_id', user.id).in('lote', keys);
+  const hechos = new Set((meta || []).filter(m => m.sondeado_en).map(m => m.lote));
+  const pendientes = keys.filter(k => !hechos.has(k));
+  const { data: imgs } = await admin.from('arkaphoto_imagenes').select('lote,seq').eq('user_id', user.id).in('lote', pendientes.slice(0, 200));
+  (imgs || []).forEach(r => porLote.get(r.lote)?.seqs.add(r.seq));
+  let lotesHechos = 0, encoladas = 0;
+  for (const k of pendientes) {
+    if (Date.now() - inicio > PRESUPUESTO_MS) break;
+    const L = porLote.get(k); let host;
+    try { const u = new URL(L.base); if (u.protocol !== 'https:') throw 0; host = u.hostname; } catch { continue; }
+    if (!hostPermitido(host)) continue;
+    const minimo = pow2(Math.max(1, ...L.seqs)); let tamano = minimo;
+    for (const t of ESCALA) { if (t <= minimo) break; if (await existe(`${L.base}/${k}-${t}.${L.ext}`)) { tamano = t; break; } }
+    await admin.from('arkaphoto_lotes').upsert({ user_id: user.id, lote: k, tamano, sondeado_en: new Date().toISOString() }, { onConflict: 'user_id,lote' });
+    const nuevas = [];
+    for (let i = 1; i <= tamano; i++) if (!L.seqs.has(i)) nuevas.push({ user_id: user.id, lote: k, seq: i, ext: L.ext, nombre: `${k}-${i}.${L.ext}`, url: `${L.base}/${k}-${i}.${L.ext}`, origen_archivo: 'completar' });
+    if (nuevas.length) { const { data: ins } = await admin.from('arkaphoto_cola').upsert(nuevas, { onConflict: 'user_id,lote,seq', ignoreDuplicates: true }).select('id'); encoladas += ins?.length || 0; }
+    lotesHechos++;
+  }
+  res.status(200).json({ lotes: lotesHechos, encoladas, restantes: pendientes.length - lotesHechos, fin: pendientes.length - lotesHechos === 0, ms: Date.now() - inicio });
 }
