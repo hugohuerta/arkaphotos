@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>ARKAPHOTO</title>
+<title>ARKAPHOTO · elothe.dev</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 :root{
@@ -31,7 +31,6 @@ p{margin:0}
 .who{font-size:.85rem;color:var(--muted)}
 label.f{display:grid;gap:4px;font-size:.8rem;color:var(--muted)}
 input[type=text],input[type=email],select{font:inherit;font-family:var(--mono);font-size:.9rem;padding:9px 11px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);width:100%}
-input.code{font-size:1.6rem;letter-spacing:.35em;text-align:center;max-width:16ch}
 input:focus-visible,select:focus-visible,button:focus-visible,.drop:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 button,.btnlink{font:inherit;font-weight:500;padding:8px 14px;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--fg);cursor:pointer;text-decoration:none;display:inline-block}
 button.primary,.btnlink.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
@@ -77,6 +76,28 @@ ul.lst li a{color:var(--accent);word-break:break-all}
 .bad{font-family:var(--mono);font-size:.8rem;color:var(--warn);word-break:break-all;white-space:pre-line}
 .toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:6px;font-size:.85rem;opacity:0;transition:opacity .2s;pointer-events:none;z-index:5}
 .toast.show{opacity:1}
+/* login (un solo look, oscuro, como el portal) */
+.login{--lbg:#0f1013;--lcard:#17181c;--lline:#2a2c33;--lfg:#e8e6df;--lmuted:#9a968c;--gold:#f2c14e;--gold-ink:#1a1405;
+  position:fixed;inset:0;background:var(--lbg);color:var(--lfg);display:grid;place-items:center;overflow:auto;
+  padding:24px max(16px,env(safe-area-inset-left,0px))}
+.card{width:100%;max-width:430px;background:var(--lcard);border:1px solid var(--lline);border-radius:12px;padding:34px 32px 22px;display:grid;gap:4px}
+.brand{font-size:1.35rem;font-weight:700;letter-spacing:-.01em}
+.brand span{color:var(--lmuted)}
+.eyebrow{font-family:var(--mono);font-size:.68rem;letter-spacing:.14em;text-transform:uppercase;color:var(--lmuted);margin-bottom:26px}
+.step{display:grid;gap:10px}
+.lt{font-size:1.25rem;font-weight:600;margin:0;text-transform:none;letter-spacing:0;color:var(--lfg)}
+.ld{color:var(--lmuted);font-size:.95rem;margin-bottom:8px}
+.lf{font-family:var(--mono);font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;color:var(--lmuted)}
+.login input{background:var(--lbg);border:1px solid var(--lline);color:var(--lfg);border-radius:8px;padding:12px 14px;font-size:.95rem}
+.login input::placeholder{color:#5c5a52}
+.login input.code{font-size:1.7rem;letter-spacing:.3em;text-align:center;max-width:none}
+.gold{background:var(--gold);color:var(--gold-ink);border:0;border-radius:8px;padding:13px;font-weight:600;font-size:1rem;margin-top:6px}
+.gold:disabled{opacity:.6}
+.lrow{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.link{background:none;border:0;padding:4px 0;color:var(--lmuted);font-size:.85rem;text-decoration:underline;text-underline-offset:3px}
+.link:disabled{opacity:.5;text-decoration:none}
+.login .err{min-height:1.2em;color:#f08a72}
+.ver{font-family:var(--mono);font-size:.7rem;color:var(--lmuted);text-align:center;margin-top:14px}
 /* galería */
 .gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
 .gc{margin:0;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}
@@ -89,28 +110,35 @@ ul.lst li a{color:var(--accent);word-break:break-all}
 <body>
 
 <!-- LOGIN -->
-<div class="wrap" id="vLogin" hidden>
-  <header><h1>ARKAPHOTO</h1><p class="sub">Acceso con código de un solo uso enviado a tu correo.</p></header>
-  <section class="panel" id="stepEmail">
-    <form id="fEmail" class="row">
-      <label class="f grow">Correo
-        <input type="email" id="email" autocomplete="email" required placeholder="tu@correo.com">
-      </label>
-      <button class="primary" type="submit" id="btnEnviar">Enviar código</button>
+<div class="login" id="vLogin" hidden>
+  <div class="card">
+    <div class="brand">elothe<span>.dev</span></div>
+    <div class="eyebrow">Portal de aplicaciones · ARKAPHOTO</div>
+
+    <form id="fEmail" class="step">
+      <h2 class="lt">Iniciar sesión</h2>
+      <p class="ld">Escribe tu correo de la organización. Te enviaremos un código de acceso.</p>
+      <label class="lf" for="email">Correo</label>
+      <input type="email" id="email" autocomplete="email" required placeholder="nombre@empresa.mx">
+      <button class="gold" type="submit" id="btnEnviar">Continuar</button>
+      <p class="err" id="errEmail"></p>
     </form>
-    <p class="err" id="errEmail" style="margin-top:8px"></p>
-  </section>
-  <section class="panel" id="stepCode" hidden>
-    <form id="fCode" class="row">
-      <label class="f">Código de 8 dígitos
-        <input type="text" id="code" class="code" inputmode="numeric" autocomplete="one-time-code" pattern="\d{8}" maxlength="8" required>
-      </label>
-      <button class="primary" type="submit" id="btnVerificar">Entrar</button>
-      <button class="quiet" type="button" id="btnOtro">Usar otro correo</button>
+
+    <form id="fCode" class="step" hidden>
+      <h2 class="lt">Código de acceso</h2>
+      <p class="ld" id="codeNote"></p>
+      <label class="lf" for="code">Código de 8 dígitos</label>
+      <input type="text" id="code" class="code" inputmode="numeric" autocomplete="one-time-code" pattern="\d{8}" maxlength="8" placeholder="········" required>
+      <button class="gold" type="submit" id="btnVerificar">Entrar</button>
+      <div class="lrow">
+        <button class="link" type="button" id="btnReenviar">Reenviar código</button>
+        <button class="link" type="button" id="btnOtro">Usar otro correo</button>
+      </div>
+      <p class="err" id="errCode"></p>
     </form>
-    <p class="note" style="margin-top:8px" id="codeNote"></p>
-    <p class="err" id="errCode"></p>
-  </section>
+
+    <div class="ver">v0.2.0</div>
+  </div>
 </div>
 
 <!-- APP -->
@@ -225,24 +253,45 @@ async function route(){
 window.addEventListener('hashchange', route);
 sb.auth.onAuthStateChange((ev)=>{ if(ev==='SIGNED_OUT') show('vLogin'); });
 
-// ---------- login OTP
-let emailPend = '';
+// ---------- login: código de 8 dígitos por Resend (/api/auth/*), sesión de Supabase vía token_hash
+let emailPend = '', cooldownT = null;
+const post = (url, body) => fetch(url,{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }).then(async r=>({ ok:r.ok, status:r.status, j: await r.json().catch(()=>({})) }));
+
+async function enviarCodigo(){
+  const r = await post('/api/auth/send', { email: emailPend });
+  if(!r.ok) throw new Error(r.j.error || `Error ${r.status}`);
+  $('codeNote').textContent = `Enviamos un código de 8 dígitos a ${emailPend}. Caduca en ${r.j.ttl} minutos.`;
+  iniciarCooldown(r.j.cooldown || 45);
+}
+function iniciarCooldown(s){
+  clearInterval(cooldownT); const b=$('btnReenviar'); let n=s;
+  b.disabled=true; b.textContent=`Reenviar en ${n} s`;
+  cooldownT=setInterval(()=>{ n--; if(n<=0){ clearInterval(cooldownT); b.disabled=false; b.textContent='Reenviar código'; } else b.textContent=`Reenviar en ${n} s`; },1000);
+}
 $('fEmail').addEventListener('submit', async e=>{
   e.preventDefault(); $('errEmail').textContent=''; $('btnEnviar').disabled=true;
-  emailPend = $('email').value.trim();
-  const { error } = await sb.auth.signInWithOtp({ email: emailPend, options: { shouldCreateUser: true } });
+  emailPend = $('email').value.trim().toLowerCase();
+  try{ await enviarCodigo(); $('fEmail').hidden=true; $('fCode').hidden=false; $('code').value=''; $('code').focus(); }
+  catch(err){ $('errEmail').textContent = err.message; }
   $('btnEnviar').disabled=false;
-  if(error){ $('errEmail').textContent = error.message; return; }
-  $('stepEmail').hidden=true; $('stepCode').hidden=false; $('codeNote').textContent=`Código enviado a ${emailPend}. Caduca en pocos minutos.`; $('code').focus();
 });
+$('btnReenviar').addEventListener('click', async ()=>{
+  $('errCode').textContent='';
+  try{ await enviarCodigo(); }catch(err){ $('errCode').textContent=err.message; }
+});
+$('code').addEventListener('input', e=>{ e.target.value = e.target.value.replace(/\D/g,'').slice(0,8); if(e.target.value.length===8) $('fCode').requestSubmit(); });
 $('fCode').addEventListener('submit', async e=>{
   e.preventDefault(); $('errCode').textContent=''; $('btnVerificar').disabled=true;
-  const { error } = await sb.auth.verifyOtp({ email: emailPend, token: $('code').value.trim(), type: 'email' });
+  try{
+    const r = await post('/api/auth/verify', { email: emailPend, code: $('code').value });
+    if(!r.ok) throw new Error(r.j.error || `Error ${r.status}`);
+    const { error } = await sb.auth.verifyOtp({ token_hash: r.j.token_hash, type: 'magiclink' });
+    if(error) throw new Error('No se pudo abrir la sesión: '+error.message);
+    $('code').value=''; $('fCode').hidden=true; $('fEmail').hidden=false; route();
+  }catch(err){ $('errCode').textContent = err.message; }
   $('btnVerificar').disabled=false;
-  if(error){ $('errCode').textContent = 'Código incorrecto o vencido.'; return; }
-  $('code').value=''; $('stepCode').hidden=true; $('stepEmail').hidden=false; route();
 });
-$('btnOtro').addEventListener('click', ()=>{ $('stepCode').hidden=true; $('stepEmail').hidden=false; });
+$('btnOtro').addEventListener('click', ()=>{ $('fCode').hidden=true; $('fEmail').hidden=false; $('errCode').textContent=''; });
 $('btnSalir').addEventListener('click', async ()=>{ await sb.auth.signOut(); show('vLogin'); });
 
 // ---------- estado

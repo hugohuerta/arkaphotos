@@ -2,27 +2,32 @@
 
 Organizador de lotes de imágenes del generador. Sube imágenes, detecta posiciones faltantes (1–32 por lote), las trae de una ruta pública y las guarda en un bucket.
 
-Stack: HTML estático + `@supabase/supabase-js` (CDN) · Supabase Auth (OTP por correo) + Postgres + Storage · Vercel (estático + 2 funciones en `api/`).
+Stack: HTML estático + `@supabase/supabase-js` (CDN) · Supabase Auth + Postgres + Storage · Resend (correo con el código) · Vercel (estático + funciones en `api/`).
 
 ## Estructura
 
 ```
 public/index.html        app completa (login, organizador, galería en #galeria)
 api/config.js            entrega URL y anon key al navegador
+api/auth/send.js         genera código de 8 dígitos, lo guarda hasheado, lo manda por Resend
+api/auth/verify.js       valida el código y devuelve token_hash de Supabase para abrir sesión
+api/_auth.js             utilidades compartidas de auth (no es endpoint)
 api/traer.js             jala faltantes de la ruta pública → bucket (usa service role)
 supabase/schema.sql      tablas, RLS, bucket y políticas de Storage
+supabase/002_otp.sql     tabla de códigos de acceso
 ```
 
 ## 1. Supabase
 
-1. Crear proyecto. SQL Editor → pegar y ejecutar `supabase/schema.sql`.
-2. **Authentication → Providers → Email**: dejar habilitado. En **Authentication → Settings** (o Email provider, según versión del dashboard) poner **Email OTP Length = 8**. Si no lo cambias, el código llega de 6 dígitos y el campo del login lo rechaza.
-3. **Authentication → Email Templates → Magic Link**: el cuerpo debe incluir `{{ .Token }}` (el código), no solo `{{ .ConfirmationURL }}`. Ejemplo mínimo:
-   ```
-   <p>Tu código ARKAPHOTO: <b>{{ .Token }}</b></p>
-   ```
-4. Tras tu primer login, en **Authentication → Settings** apagar **Allow new users to sign up** para que nadie más se cree cuenta con su correo.
-5. Copiar de **Project Settings → API**: Project URL, anon key, service_role key.
+1. Crear proyecto. SQL Editor → ejecutar `supabase/schema.sql` y luego `supabase/002_otp.sql`.
+2. **Authentication → Providers → Email**: dejar habilitado (la sesión se abre con un enlace mágico generado en servidor; el correo lo manda Resend, no Supabase).
+3. Copiar de **Project Settings → API**: Project URL, anon key, service_role key.
+
+## 1b. Resend
+
+1. Verificar el dominio desde el que saldrán los correos (DNS: SPF/DKIM).
+2. Crear API key con permiso de envío.
+3. El remitente va en `RESEND_FROM`, p. ej. `elothe.dev <acceso@elothe.dev>`.
 
 ## 2. Vercel
 
@@ -33,6 +38,11 @@ Variables de entorno del proyecto:
 | `SUPABASE_URL` | Project URL |
 | `SUPABASE_ANON_KEY` | anon public |
 | `SUPABASE_SERVICE_ROLE_KEY` | service_role (solo servidor; nunca al cliente) |
+| `RESEND_API_KEY` | Resend → API Keys |
+| `RESEND_FROM` | remitente verificado, `Nombre <correo@dominio>` |
+| `APP_NAME` | opcional, nombre en el correo (default `ARKAPHOTO`) |
+| `OTP_SECRET` | opcional, sal del hash de códigos (default: service key) |
+| `ALLOWED_EMAILS` / `ALLOWED_EMAIL_DOMAINS` | opcional, lista blanca separada por comas; vacío = cualquiera |
 
 Deploy desde el repo (framework: Other; sin build; output: `public`). Vercel detecta `api/` solo.
 
@@ -45,7 +55,7 @@ vercel
 
 ## 3. Flujo
 
-1. Correo → código de 8 dígitos → sesión.
+1. Correo → `/api/auth/send` manda un código de 8 dígitos por Resend (caduca en 10 min, 5 intentos, reenvío cada 45 s) → `/api/auth/verify` lo valida y entrega un `token_hash` → `supabase.auth.verifyOtp` abre la sesión. El usuario de Auth se crea en el primer acceso.
 2. Configuración: ruta pública (base de la URL de AWS) y regla de rango (bloques de 16 o siempre 32).
 3. Subir imágenes: se resuelven copias `(n)` (mismo tamaño → se ignora; sin original → se procesa con nombre limpio; tamaño distinto → se conserva la original y se marca). Cada imagen va a `arkaphoto/<uid>/<lote>/<nombre>` y a `arkaphoto_imagenes`.
 4. Faltantes → "Sí, validar" → **TRAER a ARKAPHOTO** → `/api/traer` descarga `{ruta}/{nombre}` por cada faltante y la guarda con `origen = traida`.
