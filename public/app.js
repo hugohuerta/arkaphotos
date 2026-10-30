@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-const CFG = { VERSION: '0.8.2', MIGRACION_ESPERADA: 9, URL_TTL: 3600 };
+const CFG = { VERSION: '0.9.0', MIGRACION_ESPERADA: 9, URL_TTL: 3600 };
 const $ = id => document.getElementById(id);
 const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
 const MAX = 32, BUCKET = 'arkaphoto';
@@ -128,6 +128,9 @@ const hijos = pid => [...clasif.values()].filter(c=>(c.parent_id??null)===(pid??
 function rutaClasif(id){ const out=[]; let c=clasif.get(id); while(c){ out.unshift(c); c=clasif.get(c.parent_id); } return out; }
 const tipoDe = id => rutaClasif(id)[0]?.id ?? null;
 
+const fechaLote = key => { const t=Number(key.split('-')[0]); return t>1e11 ? new Date(t) : new Date(t*1000); };
+const fmtFecha = d => d.toLocaleDateString('es-MX',{ year:'numeric', month:'short', day:'2-digit' });
+const dfil = { desde:'', hasta:'', sub:'', q:'' };
 // Etiqueta visible: LOTE <ts> (con -A/-B si el timestamp se repite); con nombre: NOMBRE <ts>-A
 function etiqueta(key){
   const ts=key.split('-')[0];
@@ -178,20 +181,34 @@ function resumenLote(L){
 // ---------- INICIO
 function renderInicio(){
   let fotos=0, bytes=0, fav=0, traidas=0, completos=0, ocultas=0;
-  const rows=[];
-  for(const [key,L] of lotes){
+  // selector de subgrupo (nivel 2, agrupado por tipo)
+  const sel=$('dSub'); const cur=dfil.sub;
+  sel.innerHTML='<option value="">Todos</option>'+hijos(null).map(t=>{ const subs=hijos(t.id); return subs.length?`<optgroup label="${esc(t.nombre)}">${subs.map(c=>`<option value="${c.id}">${esc(c.nombre)}</option>`).join('')}</optgroup>`:''; }).join('');
+  sel.value=cur;
+  const rows=[]; let mostrados=0;
+  const orden=[...lotes.entries()].sort((a,b)=>fechaLote(b[0])-fechaLote(a[0]));
+  for(const [key,L] of orden){
     const r=resumenLote(L); fotos+=r.n; bytes+=r.bytes; fav+=r.fav; traidas+=r.traidas; ocultas+=r.ocultas; if(!r.faltan) completos++;
-    const ruta=rutaClasif(lotesMeta.get(key)?.clasif_id).map(c=>esc(c.nombre)).join(' › ');
-    rows.push(`<tr><td><a href="#galerias" class="etq" style="font-size:.9rem">${esc(etiqueta(key))}</a><div class="key" style="font-size:.7rem;color:var(--muted)">${esc(key)}</div></td><td class="ruta">${ruta||'<span class="pill warn">sin clasificar</span>'}</td><td>${r.n-r.traidas}</td><td>${r.traidas}</td><td>${r.faltan}</td><td>${fmt(r.bytes)}</td><td><span class="pill ${r.faltan?'miss':'ok'}">${r.faltan?'faltan '+r.faltan:'completo'}</span></td></tr>`);
-  }
-  $('dFotos').textContent=fotos; $('dFotosSub').textContent=`${lotes.size} lotes · ${traidas} traídas${ocultas?` · ${ocultas} ocultas`:''}`;
+    const meta=lotesMeta.get(key)||{}; const ruta=rutaClasif(meta.clasif_id); const f=fechaLote(key);
+    if(dfil.desde && f < new Date(dfil.desde+'T00:00:00')) continue;
+    if(dfil.hasta && f > new Date(dfil.hasta+'T23:59:59')) continue;
+    if(dfil.sub && String(ruta[1]?.id)!==dfil.sub) continue;
+    if(dfil.q){ const texto=[etiqueta(key), key, meta.nombre, meta.notas, ...ruta.map(c=>c.nombre), ...tagsDe(key).map(t=>t.nombre)].filter(Boolean).join(' ').toLowerCase(); if(!texto.includes(dfil.q)) continue; }
+    mostrados++;  $('dFotos').textContent=fotos; $('dFotosSub').textContent=`${lotes.size} lotes · ${traidas} traídas${ocultas?` · ${ocultas} ocultas`:''}`;
   $('dEspacio').textContent=fmt(bytes); $('dEspacioSub').textContent=`${(bytes/1073741824).toFixed(3)} GB en el bucket`;
   const gb=bytes/1073741824, cobrable=Math.max(0, gb-cfg.gbInc), costo=cobrable*cfg.tarifa;
   $('dCosto').textContent = cfg.tarifa ? `US$${costo.toFixed(costo<1?3:2)}` : '—';
   $('dCostoSub').textContent = cfg.tarifa ? `${cobrable.toFixed(3)} GB sobre ${cfg.gbInc} GB incluidos × US$${cfg.tarifa}/GB` : 'configura la tarifa en Admin';
   $('dFav').textContent=fav; $('dFavSub').textContent=`${completos} de ${lotes.size} lotes completos`;
-  $('dLotes').innerHTML = rows.join('') || '<tr><td colspan="7" class="note">Aún no hay lotes. Sube fotos en "Carga fotos".</td></tr>';
+  $('dLotes').innerHTML = rows.join('') || `<tr><td colspan="8" class="note">${lotes.size?'Ningún lote cumple el filtro.':'Aún no hay lotes. Sube fotos en "Carga fotos".'}</td></tr>`;
+  $('dLotesN').textContent = `${mostrados} de ${lotes.size}`;
 }
+
+$('dDesde').addEventListener('change',e=>{ dfil.desde=e.target.value; renderInicio(); });
+$('dHasta').addEventListener('change',e=>{ dfil.hasta=e.target.value; renderInicio(); });
+$('dSub').addEventListener('change',e=>{ dfil.sub=e.target.value; renderInicio(); });
+$('dBuscar').addEventListener('input',e=>{ dfil.q=e.target.value.trim().toLowerCase(); renderInicio(); });
+$('dLimpiar').addEventListener('click',()=>{ Object.assign(dfil,{desde:'',hasta:'',sub:'',q:''}); $('dDesde').value=''; $('dHasta').value=''; $('dBuscar').value=''; renderInicio(); });
 
 // ---------- GALERÍAS
 $('galFiltro').addEventListener('click', e=>{ const b=e.target.closest('button'); if(!b) return; galFiltro=b.dataset.f; document.querySelectorAll('#galFiltro button').forEach(x=>x.classList.toggle('on',x===b)); renderGalerias(); });
