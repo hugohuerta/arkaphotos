@@ -1,4 +1,4 @@
-<!-- ARKAPHOTO v0.8.1 -->
+<!-- ARKAPHOTO v0.8.2 -->
 <!doctype html>
 <html lang="es">
 <head>
@@ -173,6 +173,7 @@ textarea{font:inherit;font-family:var(--mono);font-size:.82rem;width:100%;min-he
 /* vistas de galería */
 .gal.x2{grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
 .gc .ov{position:absolute;top:6px;left:6px;right:6px;display:flex;justify-content:space-between;pointer-events:none}
+.gc .ov.bot{top:auto;bottom:6px;justify-content:flex-end;gap:6px}
 .gc .ov button{pointer-events:auto;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 10px;cursor:pointer;color:var(--muted);font-size:1.05rem;line-height:1;min-width:34px}
 .gc .ov button.on{color:#e0a500}
 .gc .ov button.hid.on{color:var(--miss)}
@@ -189,7 +190,7 @@ section.panel.col .cover{display:block}
 .gal.lista{display:grid;grid-template-columns:1fr;gap:6px}
 .gal.lista .gc{display:grid;grid-template-columns:96px 1fr;align-items:center;gap:12px;padding-right:10px}
 .gal.lista .gc img{width:96px;height:96px;aspect-ratio:1}
-.gal.lista .gc .ov{position:static;justify-content:flex-start;gap:6px;grid-column:2;pointer-events:auto}
+.gal.lista .gc .ov,.gal.lista .gc .ov.bot{position:static;justify-content:flex-start;gap:6px;grid-column:2;pointer-events:auto}
 .gal.lista .gc .n{position:static;grid-column:2}
 .gal.lista .gc figcaption{grid-column:2;padding:0}
 .gal.lista .gc .fila{grid-column:2;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;font-size:.82rem;color:var(--muted)}

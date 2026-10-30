@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-const CFG = { VERSION: '0.8.1', MIGRACION_ESPERADA: 9, URL_TTL: 3600 };
+const CFG = { VERSION: '0.8.2', MIGRACION_ESPERADA: 9, URL_TTL: 3600 };
 const $ = id => document.getElementById(id);
 const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
 const MAX = 32, BUCKET = 'arkaphoto';
@@ -244,6 +244,7 @@ function renderGalerias(){
         cards.push(`<figure class="gc ${it.oculta?'oc':''} ${pseq===i?'portada':''}" data-id="${it.id}" data-seq="${i}"><img loading="lazy" src="${esc(it.url)}" alt="${esc(nombre(L,i))}" data-seq="${i}">
           <span class="n">${i}</span>
           <div class="ov"><button class="fav ${it.favorita?'on':''}" title="Favorita" data-id="${it.id}">${it.favorita?'★':'☆'}</button><button class="hid ${it.oculta?'on':''}" title="${it.oculta?'Mostrar':'Esconder'}" data-id="${it.id}">✕</button></div>
+          <div class="ov bot"><button class="sav" title="Guardar foto" data-seq="${i}">💾</button><button class="opn" title="Abrir en otra pestaña" data-seq="${i}">🔍</button></div>
           ${galVista==='lista'?`<div class="fila"><span class="key">${esc(nombre(L,i))}</span><span>${fmt(it.bytes)}</span><span class="pill ${it.origen==='traida'?'ok':'warn'}">${it.origen}</span>${it.favorita?'<span class="pill ok">★</span>':''}${it.oculta?'<span class="pill miss">oculta</span>':''}</div>`:''}
           ${ed?`<figcaption><b>${i}</b><span class="pill ${it.origen==='traida'?'ok':'warn'}">${it.origen}</span>${pseq===i?'<span class="pill ok">portada</span>':`<button class="quiet mkp" data-seq="${i}" style="padding:2px 6px;font-size:.72rem">portada</button>`}<a href="${esc(it.url)}" target="_blank" rel="noopener">abrir</a></figcaption>`:''}</figure>`);
       } else if(galFiltro!=='fav' && galFiltro!=='ocultas') cards.push(`<figure class="gc"><div class="cell miss" style="aspect-ratio:1;border:0;border-radius:0">${i}</div>${ed?`<figcaption><b>${i}</b><span class="pill miss">falta</span></figcaption>`:''}</figure>`);
@@ -339,6 +340,8 @@ $('galBody').addEventListener('click', async e=>{
   const col=e.target.closest('button.colap'); if(col){ const k=col.dataset.lote; colapsados.has(k)?colapsados.delete(k):colapsados.add(k); guardaColapsados(); renderGalerias(); return; }
   const pz=e.target.closest('button.zip'); if(pz){ descargarZip([pz.dataset.lote]); return; }
   const ps=e.target.closest('button.pase'); if(ps){ abrirPase(ps.dataset.lote); return; }
+  const sv=e.target.closest('button.sav'); if(sv){ const L=lotes.get(sv.closest('section').dataset.lote), seq=Number(sv.dataset.seq); guardarFoto(L.items.get(seq).url, nombre(L,seq)); return; }
+  const op=e.target.closest('button.opn'); if(op){ const L=lotes.get(op.closest('section').dataset.lote), seq=Number(op.dataset.seq); window.open(L.items.get(seq).url,'_blank','noopener'); return; }
   const img=e.target.closest('img[data-seq]'); if(img){ abrirPase(img.closest('section').dataset.lote, Number(img.dataset.seq)); return; }
   const b=e.target.closest('button.fav'); if(!b) return;
   const id=Number(b.dataset.id); let it; for(const L of lotes.values()) for(const x of L.items.values()) if(x.id===id) it=x;
@@ -364,9 +367,11 @@ $('lbPrev').addEventListener('click',()=>{ pase.i=(pase.i-1+pase.lista.length)%p
 $('lbNext').addEventListener('click',()=>{ pase.i=(pase.i+1)%pase.lista.length; pintaPase(); });
 $('lbCerrar').addEventListener('click',cerrarPase);
 $('lbAbrir').addEventListener('click',()=>{ const x=pase.lista[pase.i]; if(x) window.open(x.url,'_blank','noopener'); });
-$('lbGuardar').addEventListener('click', async ()=>{ const x=pase.lista[pase.i]; if(!x) return;
-  try{ const r=await fetch(x.url); if(!r.ok) throw 0; const b=await r.blob(); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=x.nombre; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),30000); }
-  catch{ toast('No se pudo descargar; usa Abrir y guarda desde la pestaña'); } });
+async function guardarFoto(url, nombreArch){
+  try{ const r=await fetch(url); if(!r.ok) throw 0; const b=await r.blob(); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=nombreArch; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),30000); toast('Guardada: '+nombreArch); }
+  catch{ toast('No se pudo descargar; usa Abrir y guarda desde la pestaña'); }
+}
+$('lbGuardar').addEventListener('click', ()=>{ const x=pase.lista[pase.i]; if(x) guardarFoto(x.url, x.nombre); });
 document.addEventListener('keydown',e=>{ if($('lb').hidden) return; if(e.key==='ArrowLeft') $('lbPrev').click(); else if(e.key==='ArrowRight') $('lbNext').click(); else if(e.key==='Escape') cerrarPase(); });
 
 // ---------- DESCARGA ZIP (en el navegador; excluye ocultas)

@@ -1,5 +1,6 @@
 # CAMBIOS · ARKAPHOTO
 
+- v0.8.2 — 2026-10-29 — botones 💾 guardar y 🔍 abrir en pestaña sobre cada foto (esquinas inferiores); el clic al centro sigue abriendo el pase
 - v0.8.1 — 2026-10-29 — Galerías: filtros en cajas (Filtro · Vista · Tags); vista Lista (filas); pase a pantalla completa con Guardar foto y Abrir; ★ y ✕ separados en esquinas opuestas con área de clic mayor
 - v0.8.0 — 2026-10-29 — Galerías: datos de la foto solo en modo Editar; vistas Cuadrícula / 2X / Pase (foto grande con flechas y teclado); colapsar lotes a portada (default: primera subida; elegible en Editar); descarga ZIP por lote o de las visibles (en el navegador, JSZip); fotos ocultas (✕) con filtro Ocultas (mig 09)
 - v0.7.0 — 2026-10-29 — etiqueta de galería = SUBGRUPO [- DETALLE] - <ts>; clasificación del lote replicada en cada foto (columna + triggers, mig 08); cabecera reducida: etiqueta, tags con quitar, conteo grande, + Tag rápido, Editar
