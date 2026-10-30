@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Organizador de Lotes</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: una columna de trabajo (max 980px); cabecera con config plegable, zona de carga, lotes como filas de 32 celdas, panel de faltantes al final. */
+:root{
+  --bg:#f6f4ef; --panel:#ffffff; --fg:#1c1b18; --muted:#6b675c; --line:#dcd7cb;
+  --accent:#0f6b5b; --accent-ink:#ffffff;
+  --ok:#2e7d4f; --ok-bg:#dff2e4; --miss:#b3432b; --miss-bg:#fbe3dc; --warn:#8a6d1f; --warn-bg:#f7edcc;
+  --font:"IBM Plex Sans",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#15161a; --panel:#1e2026; --fg:#ebe8e0; --muted:#9a968c; --line:#33363e;
+  --accent:#4cc2a8; --accent-ink:#0d1a16;
+  --ok:#5fc98a; --ok-bg:#1d3327; --miss:#f08a72; --miss-bg:#3d221c; --warn:#e0bd5a; --warn-bg:#3a3118; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#15161a; --panel:#1e2026; --fg:#ebe8e0; --muted:#9a968c; --line:#33363e;
+  --accent:#4cc2a8; --accent-ink:#0d1a16;
+  --ok:#5fc98a; --ok-bg:#1d3327; --miss:#f08a72; --miss-bg:#3d221c; --warn:#e0bd5a; --warn-bg:#3a3118; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:15px;line-height:1.5;margin:0;
+  padding-block:28px 60px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:980px;margin:0 auto;display:grid;gap:22px}
+h1{font-size:1.5rem;font-weight:600;margin:0;letter-spacing:-.01em;text-wrap:balance}
+h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 10px;font-weight:600}
+p{margin:0}
+.sub{color:var(--muted);max-width:65ch}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.grow{flex:1 1 220px;min-width:0}
+label.f{display:grid;gap:4px;font-size:.8rem;color:var(--muted)}
+input[type=text],select{font:inherit;font-family:var(--mono);font-size:.85rem;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);width:100%}
+input:focus-visible,select:focus-visible,button:focus-visible,.drop:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button{font:inherit;font-weight:500;padding:8px 14px;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--fg);cursor:pointer}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button:disabled{opacity:.5;cursor:default}
+.btnlink{display:inline-block;font-weight:500;padding:8px 14px;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--fg);text-decoration:none}
+.btnlink.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+details summary{cursor:pointer;color:var(--muted);font-size:.9rem;list-style:none}
+details summary::before{content:"▸ ";}
+details[open] summary::before{content:"▾ ";}
+.drop{border:2px dashed var(--line);border-radius:10px;padding:34px 18px;text-align:center;color:var(--muted);cursor:pointer;transition:border-color .15s,background .15s}
+.drop.over{border-color:var(--accent);background:var(--ok-bg)}
+.drop strong{color:var(--fg)}
+.drop input{display:none}
+.stats{display:flex;flex-wrap:wrap;gap:18px;font-variant-numeric:tabular-nums}
+.stats b{font-size:1.4rem;font-weight:600;display:block;line-height:1.1}
+.stats span{font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.lote{display:grid;gap:10px;padding-block:14px;border-top:1px solid var(--line)}
+.lote:first-of-type{border-top:0;padding-top:0}
+.lote-head{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline}
+.key{font-family:var(--mono);font-size:.82rem;word-break:break-all;min-width:0}
+.pill{font-size:.74rem;padding:2px 8px;border-radius:999px;font-weight:600;letter-spacing:.02em}
+.pill.ok{background:var(--ok-bg);color:var(--ok)}
+.pill.miss{background:var(--miss-bg);color:var(--miss)}
+.pill.warn{background:var(--warn-bg);color:var(--warn)}
+.seq{display:grid;grid-template-columns:repeat(16,minmax(0,1fr));gap:4px}
+.cell{aspect-ratio:1;max-width:100%;border-radius:4px;display:grid;place-items:center;font-family:var(--mono);font-size:.72rem;font-variant-numeric:tabular-nums;border:1px solid var(--line);color:var(--muted);background:var(--bg);overflow:hidden;position:relative}
+.cell img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
+.cell.has{border-color:var(--ok);color:var(--ok)}
+.cell.has::after{content:attr(data-n);position:absolute;right:2px;bottom:1px;font-size:.62rem;background:var(--panel);padding:0 3px;border-radius:3px;color:var(--fg)}
+.cell.miss{border-color:var(--miss);background:var(--miss-bg);color:var(--miss);font-weight:500}
+.cell.out{opacity:.35;border-style:dashed}
+@media (max-width:560px){.seq{grid-template-columns:repeat(8,minmax(0,1fr))}}
+.ask{display:flex;flex-wrap:wrap;gap:12px;align-items:center;border-left:4px solid var(--accent);padding-left:14px}
+.ask p{flex:1 1 260px;min-width:0}
+ul.miss-list{list-style:none;margin:0;padding:0;display:grid;gap:6px;font-family:var(--mono);font-size:.8rem}
+ul.miss-list li{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline;min-width:0}
+ul.miss-list li .n{color:var(--miss);font-weight:500;min-width:2.5ch}
+ul.miss-list li .n.okc{color:var(--ok)}
+ul.miss-list li a{color:var(--accent);word-break:break-all}
+.note{font-size:.82rem;color:var(--muted)}
+.bad{font-family:var(--mono);font-size:.8rem;color:var(--warn);word-break:break-all}
+.toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:6px;font-size:.85rem;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:1}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Organizador de lotes de imágenes</h1>
+    <p class="sub">Sube las imágenes del generador. Se agrupan por lote (prefijo del nombre), se lee la secuencia de los últimos dos dígitos y se marcan las posiciones que faltan.</p>
+  </header>
+
+  <section class="panel">
+    <details id="cfg">
+      <summary>Configuración</summary>
+      <div class="row" style="margin-top:12px">
+        <label class="f grow">Ruta pública (AWS)
+          <input type="text" id="baseUrl" placeholder="https://mi-bucket.s3.amazonaws.com/carpeta" spellcheck="false">
+        </label>
+        <label class="f" style="flex:0 1 220px">Rango esperado
+          <select id="rango">
+            <option value="16">Bloques de 16 (1–16 o 1–32)</option>
+            <option value="32">Siempre 1–32</option>
+          </select>
+        </label>
+      </div>
+      <p class="note" style="margin-top:8px">La URL de cada faltante se arma como <span class="key">{ruta}/{archivo}</span>. Se guarda en este navegador.</p>
+    </details>
+  </section>
+
+  <section>
+    <label class="drop" id="drop" tabindex="0">
+      <input type="file" id="files" multiple accept=".jpg,.jpeg,.png,image/jpeg,image/png">
+      <strong>Arrastra aquí o haz clic para elegir</strong><br>
+      Formato esperado: <span class="key">1790023723-97bc931c14c0c7ef41258f2206c04e91-16.jpg</span> (secuencia 1 a 32, sin ceros)
+    </label>
+  </section>
+
+  <section class="panel" id="resumen" hidden>
+    <div class="stats">
+      <div><b id="sArch">0</b><span>archivos</span></div>
+      <div><b id="sLotes">0</b><span>lotes</span></div>
+      <div><b id="sFalt">0</b><span>faltantes</span></div>
+      <div><b id="sDup">0</b><span>duplicados (n)</span></div>
+      <div><b id="sBad">0</b><span>no reconocidos</span></div>
+    </div>
+  </section>
+
+  <section class="panel" id="dupSec" hidden>
+    <h2>Duplicados con (n) y cómo se resolvieron</h2>
+    <ul class="miss-list" id="dupList"></ul>
+    <p class="note" style="margin-top:12px">Mismo tamaño que la original → se ignora la copia. Sin original → la copia se procesa con el nombre limpio. Tamaño distinto → se conserva la original y se marca para revisar.</p>
+  </section>
+
+  <section class="panel" id="lotes" hidden></section>
+
+  <section class="panel ask" id="pregunta" hidden>
+    <p id="preguntaTxt"></p>
+    <button class="primary" id="btnSi">Sí, validar</button>
+    <button id="btnNo">No, por ahora</button>
+  </section>
+
+  <section class="panel" id="faltantes" hidden>
+    <div class="row" style="justify-content:space-between;margin-bottom:10px">
+      <h2 style="margin:0">Faltantes a validar en la ruta pública</h2>
+      <div class="row">
+        <button id="btnCopiar">Copiar lista</button>
+        <button class="primary" id="btnTraer">TRAER a ARKAPHOTO</button>
+      </div>
+    </div>
+    <ul class="miss-list" id="missList"></ul>
+    <div id="traerBox" class="ask" style="margin-top:14px" hidden>
+      <p id="traerTxt"></p>
+      <a id="lnkAbrir" class="btnlink primary" target="_blank" rel="noopener" hidden>Abrir galería en otra pestaña</a>
+      <a id="lnkBajar" class="btnlink" download="arkaphoto-galeria.html" hidden>Descargar galería.html</a>
+    </div>
+    <p class="note" style="margin-top:12px">Piloto: las faltantes se jalan directo del enlace público; la galería marca cuáles existen y cuáles no. En la versión completa se descargan al bucket.</p>
+  </section>
+
+  <section class="panel" id="noRec" hidden>
+    <h2>No reconocidos (no siguen el patrón)</h2>
+    <div id="badList" class="bad"></div>
+  </section>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
+  const MAX = 32;
+  const $ = id => document.getElementById(id);
+  const raw = new Map();   // nombre original -> File (todo lo subido)
+  const lotes = new Map(); // key -> {ts, hash, ext, items: Map(seq->{file,url})}
+  const bad = [];
+  let dupes = [];
+  let lastMissing = [];
+
+  // ---- config (localStorage, best effort)
+  const cfg = {base:'', rango:'16'};
+  try{ const s = JSON.parse(localStorage.getItem('org-cfg')||'{}'); Object.assign(cfg,s);}catch(e){}
+  $('baseUrl').value = cfg.base; $('rango').value = cfg.rango;
+  function saveCfg(){ cfg.base=$('baseUrl').value.trim().replace(/\/+$/,''); cfg.rango=$('rango').value;
+    try{localStorage.setItem('org-cfg',JSON.stringify(cfg));}catch(e){} render(); }
+  $('baseUrl').addEventListener('change',saveCfg); $('rango').addEventListener('change',saveCfg);
+
+  // ---- carga
+  const drop=$('drop'), input=$('files');
+  ['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over');}));
+  ['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('over');}));
+  drop.addEventListener('drop',e=>addFiles(e.dataTransfer.files));
+  drop.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();input.click();}});
+  input.addEventListener('change',()=>{addFiles(input.files);input.value='';});
+
+  function addFiles(list){
+    for(const f of list){
+      if(!RX.test(f.name)){ if(!bad.includes(f.name)) bad.push(f.name); continue; }
+      if(!raw.has(f.name)) raw.set(f.name,f);
+    }
+    rebuild(); render();
+  }
+
+  // Resuelve duplicados "(n)" y reconstruye los lotes desde cero
+  function rebuild(){
+    for(const L of lotes.values()) for(const it of L.items.values()) URL.revokeObjectURL(it.url);
+    lotes.clear(); dupes=[];
+    const grupos = new Map(); // nombre canónico -> {orig:File|null, copias:[{file,idx}]}
+    for(const f of raw.values()){
+      const m=f.name.match(RX);
+      const canon = `${m[1]}-${m[2].toLowerCase()}-${parseInt(m[3],10)}.${m[5].toLowerCase()}`;
+      if(!grupos.has(canon)) grupos.set(canon,{m,orig:null,copias:[]});
+      const g=grupos.get(canon);
+      if(m[4]===undefined) g.orig=f; else g.copias.push({file:f,idx:parseInt(m[4],10)});
+    }
+    for(const [canon,g] of grupos){
+      g.copias.sort((a,b)=>a.idx-b.idx);
+      let elegido=g.orig;
+      if(g.orig){
+        for(const c of g.copias){
+          if(c.file.size===g.orig.size) dupes.push({name:c.file.name,estado:'ignorada: mismo tamaño que la original',ok:true});
+          else dupes.push({name:c.file.name,estado:`tamaño distinto (${fmt(c.file.size)} vs ${fmt(g.orig.size)}); se conservó la original, revisar`,ok:false});
+        }
+      } else if(g.copias.length){
+        elegido=g.copias[0].file;
+        dupes.push({name:elegido.name,estado:`no existe la original; se procesa como ${canon}`,ok:true});
+        g.copias.slice(1).forEach(c=>dupes.push({name:c.file.name,estado:'ignorada: ya se tomó la primera copia',ok:true}));
+      }
+      if(!elegido) continue;
+      const m=g.m, key=m[1]+'-'+m[2].toLowerCase();
+      if(!lotes.has(key)) lotes.set(key,{ts:m[1],hash:m[2].toLowerCase(),ext:m[5].toLowerCase(),items:new Map()});
+      lotes.get(key).items.set(parseInt(m[3],10),{file:elegido,url:URL.createObjectURL(elegido)});
+    }
+  }
+  const fmt = b => b>=1048576?(b/1048576).toFixed(2)+' MB':(b/1024).toFixed(0)+' KB';
+
+  // ---- lógica de rango esperado
+  function rangoEsperado(L){
+    const max = Math.max(...L.items.keys());
+    if(cfg.rango==='32') return MAX;
+    return Math.min(MAX, Math.ceil(max/16)*16);
+  }
+  function faltantes(L){
+    const hasta = rangoEsperado(L), out=[];
+    for(let i=1;i<=hasta;i++) if(!L.items.has(i)) out.push(i);
+    return out;
+  }
+  const pad = n => String(n);
+  const nombre = (L,n) => `${L.ts}-${L.hash}-${pad(n)}.${L.ext}`;
+  const urlDe = (L,n) => (cfg.base?cfg.base+'/':'')+nombre(L,n);
+
+  // ---- render
+  function render(){
+    const nArch=[...lotes.values()].reduce((a,L)=>a+L.items.size,0);
+    $('resumen').hidden = nArch===0 && bad.length===0;
+    $('lotes').hidden = lotes.size===0;
+    $('sArch').textContent=nArch; $('sLotes').textContent=lotes.size; $('sBad').textContent=bad.length;
+
+    lastMissing=[]; let total=0;
+    const frag=document.createDocumentFragment();
+    for(const [key,L] of lotes){
+      const miss=faltantes(L), hasta=rangoEsperado(L); total+=miss.length;
+      miss.forEach(n=>lastMissing.push({key,L,n}));
+      const d=document.createElement('div'); d.className='lote';
+      const fuera = [...L.items.keys()].some(k=>k>MAX||k<1);
+      d.innerHTML = `<div class="lote-head"><span class="key">${key}</span>
+        <span class="pill ${miss.length?'miss':'ok'}">${miss.length?miss.length+' faltantes':'completo'}</span>
+        <span class="pill warn">${L.items.size} de ${hasta}</span>${fuera?'<span class="pill warn">secuencia fuera de 1–32</span>':''}</div>`;
+      const g=document.createElement('div'); g.className='seq';
+      for(let i=1;i<=MAX;i++){
+        const c=document.createElement('div'); c.className='cell'; c.dataset.n=pad(i);
+        if(L.items.has(i)){ c.classList.add('has'); const im=document.createElement('img'); im.src=L.items.get(i).url; im.alt=nombre(L,i); c.appendChild(im); }
+        else if(i<=hasta){ c.classList.add('miss'); c.textContent=pad(i); }
+        else { c.classList.add('out'); c.textContent=pad(i); }
+        c.title=nombre(L,i)+(L.items.has(i)?' · cargada':i<=hasta?' · falta':' · fuera de rango');
+        g.appendChild(c);
+      }
+      d.appendChild(g); frag.appendChild(d);
+    }
+    $('lotes').replaceChildren(frag);
+    $('sFalt').textContent=total;
+
+    $('pregunta').hidden = total===0;
+    $('faltantes').hidden = true;
+    if(total){
+      $('preguntaTxt').textContent = `Se detectaron ${total} imágenes faltantes en ${[...lotes.values()].filter(L=>faltantes(L).length).length} lote(s). ¿Quieres que validemos si existen en la ruta pública?`;
+    }
+    $('noRec').hidden = bad.length===0;
+    $('badList').textContent = bad.join('\n');
+    $('badList').style.whiteSpace='pre-line';
+
+    $('sDup').textContent=dupes.length;
+    $('dupSec').hidden = dupes.length===0;
+    const dl=$('dupList'); dl.replaceChildren();
+    dupes.forEach(d=>{ const li=document.createElement('li');
+      li.innerHTML=`<span class="n ${d.ok?'okc':''}">${d.ok?'✓':'!'}</span><span>${d.name}</span><span class="note">${d.estado}</span>`;
+      dl.appendChild(li); });
+  }
+
+  $('btnSi').addEventListener('click',()=>{
+    const ul=$('missList'); ul.replaceChildren();
+    if(!cfg.base){ $('cfg').open=true; toast('Configura la ruta pública primero'); $('baseUrl').focus(); }
+    lastMissing.forEach(({L,n})=>{
+      const li=document.createElement('li');
+      const u=urlDe(L,n);
+      li.innerHTML=`<span class="n">${pad(n)}</span>`+(cfg.base?`<a href="${u}" target="_blank" rel="noopener">${u}</a>`:`<span>${nombre(L,n)}</span>`);
+      ul.appendChild(li);
+    });
+    $('faltantes').hidden=false; $('pregunta').hidden=true;
+    $('faltantes').scrollIntoView({behavior:'smooth',block:'start'});
+  });
+  $('btnNo').addEventListener('click',()=>{ $('pregunta').hidden=true; });
+
+  $('btnCopiar').addEventListener('click',()=>{
+    const txt=lastMissing.map(({L,n})=>urlDe(L,n)).join('\n');
+    const ok=()=>toast('Lista copiada');
+    if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(ok).catch(()=>fallback(txt)); } else fallback(txt);
+    function fallback(t){ const ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');ok();}catch(e){toast('Selecciona y copia manualmente');} ta.remove(); }
+  });
+  function toast(m){ const t=$('toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1800); }
+
+  // ---- TRAER a ARKAPHOTO: galería completa (cargadas embebidas + faltantes desde la ruta pública)
+  let galeriaUrl=null;
+  const esc = s => String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const leerDataUrl = f => new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(f); });
+
+  $('btnTraer').addEventListener('click', async ()=>{
+    if(!cfg.base){ $('cfg').open=true; toast('Configura la ruta pública primero'); $('baseUrl').focus(); return; }
+    const box=$('traerBox'); box.hidden=false; $('lnkAbrir').hidden=true; $('lnkBajar').hidden=true;
+    $('traerTxt').textContent='Armando la galería…'; $('btnTraer').disabled=true;
+    try{
+      const html = await armarGaleria();
+      if(galeriaUrl) URL.revokeObjectURL(galeriaUrl);
+      galeriaUrl = URL.createObjectURL(new Blob([html],{type:'text/html'}));
+      $('lnkAbrir').href=galeriaUrl; $('lnkBajar').href=galeriaUrl;
+      $('lnkAbrir').hidden=false; $('lnkBajar').hidden=false;
+      const nMiss=lastMissing.length, nUp=[...lotes.values()].reduce((a,L)=>a+L.items.size,0);
+      $('traerTxt').textContent=`Galería lista: ${nUp} cargadas aquí + ${nMiss} a traer del enlace. Al abrirla verás cuáles existen en la ruta.`;
+    }catch(e){ $('traerTxt').textContent='No se pudo armar la galería: '+e.message; }
+    $('btnTraer').disabled=false;
+  });
+
+  async function armarGaleria(){
+    const secciones=[];
+    for(const [key,L] of lotes){
+      const hasta=rangoEsperado(L), cards=[];
+      for(let i=1;i<=hasta;i++){
+        const n=nombre(L,i);
+        if(L.items.has(i)){
+          const d=await leerDataUrl(L.items.get(i).file);
+          cards.push(`<figure class="c ok"><img src="${d}" alt="${esc(n)}"><figcaption><b>${i}</b><span class="tag ok">cargada</span></figcaption></figure>`);
+        }else{
+          const u=urlDe(L,i);
+          cards.push(`<figure class="c pend" data-n="${i}"><img src="${esc(u)}" alt="${esc(n)}" onload="ok(this)" onerror="fail(this)"><figcaption><b>${i}</b><span class="tag pend">trayendo…</span><a href="${esc(u)}" target="_blank" rel="noopener">url</a></figcaption></figure>`);
+        }
+      }
+      secciones.push(`<section><h2>${esc(key)} <small>${L.items.size} cargadas · ${hasta-L.items.size} a traer</small></h2><div class="g">${cards.join('')}</div></section>`);
+    }
+    const total=lastMissing.length;
+    return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ARKAPHOTO · galería</title>
+<style>
+:root{color-scheme:dark;--bg:#15161a;--panel:#1e2026;--fg:#ebe8e0;--muted:#9a968c;--line:#33363e;--accent:#4cc2a8;--ok:#5fc98a;--ok-bg:#1d3327;--miss:#f08a72;--miss-bg:#3d221c;--pend:#e0bd5a;--pend-bg:#3a3118}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 "IBM Plex Sans",system-ui,sans-serif;padding:24px max(16px,env(safe-area-inset-left)) 60px}
+header{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:baseline;margin-bottom:22px}h1{margin:0;font-size:1.4rem;font-weight:600}
+.stat{font-variant-numeric:tabular-nums;color:var(--muted)}.stat b{color:var(--fg)}
+h2{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.85rem;font-weight:500;word-break:break-all;margin:26px 0 10px}h2 small{color:var(--muted);font-family:"IBM Plex Sans",system-ui,sans-serif}
+.g{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.c{margin:0;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;display:grid;grid-template-rows:auto auto}
+.c img{width:100%;aspect-ratio:1;object-fit:cover;display:block;background:#0e0f12}
+.c.miss img{display:none}.c.miss::before{content:"no existe en la ruta";display:grid;place-items:center;aspect-ratio:1;color:var(--miss);background:var(--miss-bg);font-size:.8rem;text-align:center;padding:8px}
+figcaption{display:flex;gap:8px;align-items:center;padding:6px 8px;font-size:.78rem;font-family:"IBM Plex Mono",ui-monospace,monospace}
+figcaption b{min-width:2ch}figcaption a{margin-left:auto;color:var(--accent)}
+.tag{padding:1px 7px;border-radius:999px;font-size:.7rem;font-weight:600}.tag.ok{background:var(--ok-bg);color:var(--ok)}.tag.pend{background:var(--pend-bg);color:var(--pend)}.tag.traida{background:var(--ok-bg);color:var(--accent)}.tag.miss{background:var(--miss-bg);color:var(--miss)}
+</style></head><body>
+<header><h1>ARKAPHOTO · galería</h1><span class="stat"><b id="tr">0</b> traídas</span><span class="stat"><b id="nf">0</b> no existen</span><span class="stat"><b>${total}</b> solicitadas al enlace</span></header>
+${secciones.join('')}
+<script>
+var tr=0,nf=0;function ok(img){var f=img.closest('figure');f.className='c traida';var t=f.querySelector('.tag');t.className='tag traida';t.textContent='traída';document.getElementById('tr').textContent=++tr}
+function fail(img){var f=img.closest('figure');f.className='c miss';var t=f.querySelector('.tag');t.className='tag miss';t.textContent='no existe';document.getElementById('nf').textContent=++nf}
+<\/script></body></html>`;
+  }
+})();
+</script>
+</body>
+</html>
