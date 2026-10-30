@@ -1,4 +1,4 @@
-<!-- ARKAPHOTO v0.18.0 -->
+<!-- ARKAPHOTO v0.18.1 -->
 <!doctype html>
 <html lang="es">
 <head>
@@ -326,7 +326,8 @@ tr.sub td:first-child{color:transparent}
         </div>
         <div class="box">
           <h3>Vista</h3>
-          <div class="seg" id="galVista"><button class="on" data-v="1x">Cuadrícula</button><button data-v="2x">2X</button><button data-v="lista">Lista</button></div>
+          <div class="fila"><div class="seg" id="galVista"><button class="on" data-v="1x">Cuadrícula</button><button data-v="2x">2X</button><button data-v="lista">Lista</button></div>
+          <label class="f">Orden<select id="galOrden" style="width:auto"><option value="carga-desc">Fecha de carga ↓</option><option value="carga-asc">Fecha de carga ↑</option><option value="lote-desc">Fecha del lote ↓</option><option value="lote-asc">Fecha del lote ↑</option><option value="nombre">Nombre A–Z</option></select></label></div>
           <div class="fila"><button class="tgl" id="btnColapsar">Colapsar todo</button><button class="tgl" id="btnZipTodo">↓ Descargar visibles</button></div>
         </div>
       </div>

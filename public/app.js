@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-const CFG = { VERSION: '0.18.0', MIGRACION_ESPERADA: 13, URL_TTL: 3600 };
+const CFG = { VERSION: '0.18.1', MIGRACION_ESPERADA: 13, URL_TTL: 3600 };
 const $ = id => document.getElementById(id);
 const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
 const MAX = 32, BUCKET = 'arkaphoto';
@@ -24,7 +24,8 @@ const lotes = new Map();   // key -> {ts,hash,ext,items:Map(seq->{id,url,origen,
 const raw = new Map();     // archivos locales pendientes de subir (nombre -> File)
 const bad = []; let dupes = [], lastMissing = [], galFiltro = 'todos';
 const fil = { tipo:'', sub:'', det:'', q:'', tag:null, fmt:'' };
-let galVista = '1x'; const colapsados = new Set(); let editando = null;
+let galVista = '1x', galOrden = 'carga-desc'; const colapsados = new Set(); let editando = null;
+try{ galOrden = localStorage.getItem('arkaphoto-orden')||'carga-desc'; }catch{}
 const sesionLotes = new Set(); const selHist = new Set(); const selCarga = new Set(); let cargaTab = 'cargar', histFiltro = 'todos';
 try{ galVista = localStorage.getItem('arkaphoto-vista')||'1x'; JSON.parse(localStorage.getItem('arkaphoto-colapsados')||'[]').forEach(k=>colapsados.add(k)); }catch{}
 const guardaColapsados = ()=>{ try{ localStorage.setItem('arkaphoto-colapsados', JSON.stringify([...colapsados])); }catch{} };
@@ -180,12 +181,13 @@ async function firmar(rutas){
 }
 const urlCache = new Map(); // ruta -> {url, exp}
 async function cargarImagenes(){
-  let data; try{ data = await todas(()=>sb.from('arkaphoto_imagenes').select('id,lote,seq,ext,ruta,bytes,origen,favorita,oculta,ancho,alto').order('lote').order('seq')); }
+  let data; try{ data = await todas(()=>sb.from('arkaphoto_imagenes').select('id,lote,seq,ext,ruta,bytes,origen,favorita,oculta,ancho,alto,creado_en').order('lote').order('seq')); }
   catch(e){ toast('Error leyendo imágenes: '+e.message); return; }
   lotes.clear();
   for(const r of data){
     const [ts,hash] = r.lote.split('-');
-    if(!lotes.has(r.lote)) lotes.set(r.lote,{ts,hash,ext:r.ext,items:new Map()});
+    if(!lotes.has(r.lote)) lotes.set(r.lote,{ts,hash,ext:r.ext,items:new Map(),cargaEn:0});
+    const Lr=lotes.get(r.lote); const ce=Date.parse(r.creado_en)||0; if(ce>Lr.cargaEn) Lr.cargaEn=ce;
     const c=urlCache.get(r.ruta); const url = c && c.exp>Date.now() ? c.url : '';
     lotes.get(r.lote).items.set(r.seq,{id:r.id,url,origen:r.origen,bytes:r.bytes||0,favorita:!!r.favorita,oculta:!!r.oculta,ruta:r.ruta,ancho:r.ancho,alto:r.alto});
   }
@@ -323,6 +325,7 @@ $('fSub').addEventListener('change', e=>{ fil.sub=e.target.value; fil.det=''; pi
 $('fDet').addEventListener('change', e=>{ fil.det=e.target.value; renderGalerias(true); });
 $('fFormato').addEventListener('change', e=>{ fil.fmt=e.target.value; renderGalerias(true); });
 $('fBuscar').addEventListener('input', e=>{ fil.q=e.target.value.trim().toLowerCase(); renderGalerias(true); });
+$('galOrden').addEventListener('change', e=>{ galOrden=e.target.value; try{ localStorage.setItem('arkaphoto-orden',galOrden); }catch{} renderGalerias(true); });
 $('galVista').addEventListener('click', e=>{ const b=e.target.closest('button[data-v]'); if(!b) return; galVista=b.dataset.v; try{ localStorage.setItem('arkaphoto-vista',galVista); }catch{} renderGalerias(); });
 $('btnColapsar').addEventListener('click', ()=>{ const todos=[...lotes.keys()]; const expandir = todos.every(k=>colapsados.has(k)); todos.forEach(k=>expandir?colapsados.delete(k):colapsados.add(k)); guardaColapsados(); renderGalerias(); });
 function portadaDe(key, L){ const meta=lotesMeta.get(key)||{}; const vis=[...L.items].filter(([,i])=>!i.oculta); if(!vis.length) return null; if(meta.portada_seq && L.items.get(meta.portada_seq) && !L.items.get(meta.portada_seq).oculta) return meta.portada_seq; const sub=vis.find(([,i])=>i.origen==='subida'); return (sub||vis[0])[0]; }
@@ -350,7 +353,9 @@ const GAL_PAG = 30; let galPag = 1;
 function renderGalerias(reset=false){
   if(reset) galPag=1;
   pintaCascada(); pintaTagsFiltro();
-  let total=0, fav=0, visibles=0; const parts=[]; const ordenadas=[...lotes.entries()].sort((a,b)=>fechaLote(b[0])-fechaLote(a[0]));
+  let total=0, fav=0, visibles=0; const parts=[];
+  const cmp = { 'carga-desc':(a,b)=>b[1].cargaEn-a[1].cargaEn, 'carga-asc':(a,b)=>a[1].cargaEn-b[1].cargaEn, 'lote-desc':(a,b)=>fechaLote(b[0])-fechaLote(a[0]), 'lote-asc':(a,b)=>fechaLote(a[0])-fechaLote(b[0]), 'nombre':(a,b)=>etiqueta(a[0]).localeCompare(etiqueta(b[0])) }[galOrden] || ((a,b)=>b[1].cargaEn-a[1].cargaEn);
+  const ordenadas=[...lotes.entries()].sort(cmp); $('galOrden').value=galOrden;
   for(const [key,L] of ordenadas){
     const r=resumenLote(L,key); total+=r.n; fav+=r.fav;
     const meta=lotesMeta.get(key)||{};
@@ -376,7 +381,7 @@ function renderGalerias(reset=false){
     const tg=tagsDe(key).map(t=>`<span class="tag">${esc(t.nombre)}<button type="button" class="qdel" data-id="${t.id}" title="Quitar tag">✕</button></span>`).join('');
     parts.push(`<section class="panel ${colapsados.has(key)?'col':''}" style="margin-bottom:16px" data-lote="${esc(key)}">
       <div class="ghead">
-        <div class="izq"><span class="etq" title="${esc(key)}">${esc(etiqueta(key))}</span>${meta.clasif_id?'':'<span class="pill warn">sin clasificar</span>'}${r.fav?`<span class="pill ok">★ ${r.fav}</span>`:''}<span class="tags">${tg}</span></div>
+        <div class="izq"><span class="etq" title="${esc(key)} · lote ${fmtFecha(fechaLote(key))} · cargado ${L.cargaEn?fmtFecha(new Date(L.cargaEn)):'—'}">${esc(etiqueta(key))}</span>${meta.clasif_id?'':'<span class="pill warn">sin clasificar</span>'}${r.fav?`<span class="pill ok">★ ${r.fav}</span>`:''}<span class="tags">${tg}</span></div>
         <div class="der">${barra(r.n, r.hasta, !!meta.sondeado_en)}${r.ocultas?`<span class="pill warn" title="ocultas">✕ ${r.ocultas}</span>`:''}<button class="tgl pase" data-lote="${esc(key)}" title="Pase de diapositivas">▶ Pase</button><button class="tgl zip" data-lote="${esc(key)}" title="Descargar ZIP">↓ ZIP</button><button class="tgl colap" data-lote="${esc(key)}">${colapsados.has(key)?'Expandir':'Colapsar'}</button><span class="qtag"><button class="qadd" data-lote="${esc(key)}">+ Tag</button></span><button class="ed" data-lote="${esc(key)}">Editar</button></div>
       </div>
       ${pseq?`<div class="cover"><img ${L.items.get(pseq).url?`src="${esc(L.items.get(pseq).url)}"`:`data-ruta="${esc(L.items.get(pseq).ruta)}"`} alt="portada" data-seq="${pseq}"><span class="n">portada · ${pseq}</span></div>`:'<div class="cover note">Sin fotos visibles</div>'}
