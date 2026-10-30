@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-const CFG = { VERSION: '0.18.1', MIGRACION_ESPERADA: 13, URL_TTL: 3600 };
+const CFG = { VERSION: '0.19.0', MIGRACION_ESPERADA: 14, URL_TTL: 3600 };
 const $ = id => document.getElementById(id);
 const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
 const MAX = 32, BUCKET = 'arkaphoto';
@@ -19,7 +19,7 @@ const sb = createClient(pub.url, pub.anonKey);
 let session = null;
 
 // ---------- estado
-const cfg = { base:'', tarifa:0.021, gbInc:1 };
+const cfg = { base:'', tarifa:0.021, gbInc:1, conc:1, pausa:1500, tanda:12, espera:10 };
 const lotes = new Map();   // key -> {ts,hash,ext,items:Map(seq->{id,url,origen,bytes,favorita,ruta})}
 const raw = new Map();     // archivos locales pendientes de subir (nombre -> File)
 const bad = []; let dupes = [], lastMissing = [], galFiltro = 'todos';
@@ -106,10 +106,11 @@ async function todas(construir, tam=1000){
   const out=[]; for(let desde=0;;desde+=tam){ const { data, error } = await construir().range(desde, desde+tam-1); if(error) throw error; out.push(...(data||[])); if(!data||data.length<tam) break; } return out;
 }
 async function cargarTodo(){
-  const { data: c } = await sb.from('arkaphoto_config').select('ruta_publica,tarifa_gb_usd,gb_incluidos').maybeSingle();
+  const { data: c } = await sb.from('arkaphoto_config').select('ruta_publica,tarifa_gb_usd,gb_incluidos,cola_concurrencia,cola_pausa_ms,cola_tanda,cola_espera_s').maybeSingle();
   cfg.base = (c?.ruta_publica||'').replace(/\/+$/,'');
   cfg.tarifa = Number(c?.tarifa_gb_usd ?? 0.021); cfg.gbInc = Number(c?.gb_incluidos ?? 1);
-  $('baseUrl').value = cfg.base; $('tarifa').value = cfg.tarifa; $('gbInc').value = cfg.gbInc;
+  cfg.conc = Number(c?.cola_concurrencia ?? 1); cfg.pausa = Number(c?.cola_pausa_ms ?? 1500); cfg.tanda = Number(c?.cola_tanda ?? 12); cfg.espera = Number(c?.cola_espera_s ?? 10);
+  $('baseUrl').value = cfg.base; $('tarifa').value = cfg.tarifa; $('gbInc').value = cfg.gbInc; pintaRitmo();
   await Promise.all([cargarClasif(), cargarLotesMeta(), cargarTags(), cargarImagenes()]);
 }
 async function cargarTags(){
@@ -214,6 +215,24 @@ $('fCfg').addEventListener('submit', async e=>{
   cfg.tarifa = parseFloat($('tarifa').value)||0; cfg.gbInc = parseFloat($('gbInc').value)||0;
   const { error } = await sb.from('arkaphoto_config').upsert({ user_id: session.user.id, ruta_publica: cfg.base, tarifa_gb_usd: cfg.tarifa, gb_incluidos: cfg.gbInc, actualizado: new Date().toISOString() });
   toast(error ? 'No se guardó: '+error.message : 'Configuración guardada');
+});
+
+// ---------- ritmo de descarga
+const PRESETS = { suave:{conc:1,pausa:1500,tanda:12,espera:10}, normal:{conc:2,pausa:500,tanda:24,espera:3}, rapido:{conc:4,pausa:0,tanda:48,espera:0} };
+function pintaRitmo(){
+  $('rConc').value=cfg.conc; $('rPausa').value=cfg.pausa; $('rTanda').value=cfg.tanda; $('rEspera').value=cfg.espera;
+  const pre=Object.entries(PRESETS).find(([,p])=>p.conc===cfg.conc&&p.pausa===cfg.pausa&&p.tanda===cfg.tanda&&p.espera===cfg.espera)?.[0];
+  document.querySelectorAll('#ritmoPre button').forEach(b=>b.classList.toggle('on',b.dataset.p===pre));
+  // estimación: tiempo por foto ≈ 2.5 s de descarga (2–3 MB) + pausa, dividido entre paralelas; más espera entre tandas
+  const porFoto=(2.5+cfg.pausa/1000)/cfg.conc, tanda=cfg.tanda*porFoto+cfg.espera, porHora=Math.round(3600/tanda*cfg.tanda);
+  $('ritmoEst').textContent=`≈ ${porHora.toLocaleString('es-MX')} fotos/hora (${(porHora/3600).toFixed(2)} fotos/s). 23,000 fotos ≈ ${(23000/porHora).toFixed(1)} h con la pestaña abierta. Estimación con fotos de ~2.5 MB.`;
+}
+$('ritmoPre').addEventListener('click', e=>{ const b=e.target.closest('button[data-p]'); if(!b) return; Object.assign(cfg, PRESETS[b.dataset.p]); pintaRitmo(); });
+['rConc','rPausa','rTanda','rEspera'].forEach(id=>$(id).addEventListener('input',()=>{ cfg.conc=Number($('rConc').value)||1; cfg.pausa=Number($('rPausa').value)||0; cfg.tanda=Number($('rTanda').value)||12; cfg.espera=Number($('rEspera').value)||0; pintaRitmo(); }));
+$('fRitmo').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const row={ user_id:session.user.id, cola_concurrencia:Math.min(4,Math.max(1,cfg.conc)), cola_pausa_ms:Math.min(60000,Math.max(0,cfg.pausa)), cola_tanda:Math.min(48,Math.max(1,cfg.tanda)), cola_espera_s:Math.min(600,Math.max(0,cfg.espera)), actualizado:new Date().toISOString() };
+  const { error } = await sb.from('arkaphoto_config').upsert(row); toast(error?'No se guardó: '+error.message:'Ritmo guardado'); if(!error) Object.assign(cfg,{conc:row.cola_concurrencia,pausa:row.cola_pausa_ms,tanda:row.cola_tanda,espera:row.cola_espera_s}); pintaRitmo();
 });
 
 // ---------- lógica de lotes
@@ -789,11 +808,13 @@ async function colaEstado(){
 async function colaBucle(){
   colaCorriendo=true; await colaEstado();
   while(colaCorriendo){
-    const r=await post('/api/cola',{ accion:'procesar', n:24 },true);
+    const r=await post('/api/cola',{ accion:'procesar', n:cfg.tanda },true);
     if(!r.ok){ toast('Cola: '+(r.j.error||r.status)); break; }
-    $('colaTxt').textContent=`Última tanda: ${r.j.procesadas} procesadas · ${r.j.traidas||0} traídas · ${r.j.existe||0} existían · ${r.j.error||0} errores · ${((r.j.ms||0)/1000).toFixed(1)} s`;
+    $('colaTxt').textContent=`Última tanda: ${r.j.procesadas} procesadas · ${r.j.traidas||0} traídas · ${r.j.existe||0} existían · ${r.j.error||0} errores · ${((r.j.ms||0)/1000).toFixed(1)} s · ritmo ${cfg.conc}×, pausa ${cfg.pausa} ms`;
+    if(r.j.frenado){ colaCorriendo=false; $('colaTxt').textContent=`El origen respondió HTTP ${r.j.frenado}: cola en pausa. Baja el ritmo en Admin y espera unos minutos antes de reanudar.`; toast(`Origen frenó (HTTP ${r.j.frenado})`); break; }
     const e=await colaEstado();
     if(r.j.fin || !e || !e.pend) break;
+    if(cfg.espera && colaCorriendo){ for(let t=cfg.espera;t>0 && colaCorriendo;t--){ $('colaBarraTxt').textContent+= t===cfg.espera?` · espera ${t}s`:''; await new Promise(r=>setTimeout(r,1000)); } }
     if(vistaActual()==='galerias'){ await cargarImagenes(); renderGalerias(); }
   }
   colaCorriendo=false; await colaEstado();

@@ -1,4 +1,4 @@
-<!-- ARKAPHOTO v0.18.1 -->
+<!-- ARKAPHOTO v0.19.0 -->
 <!doctype html>
 <html lang="es">
 <head>
@@ -488,6 +488,18 @@ tr.sub td:first-child{color:transparent}
         <button type="submit">Guardar</button>
       </form>
       <p class="note" style="margin-top:8px">La URL de cada faltante se arma como <span class="key">{ruta}/{archivo}</span>. El tamaño de cada lote (1, 2, 4, 8, 16 o 32) se determina sondeando la ruta de mayor a menor y se guarda por lote. Tarifa por default: Supabase Storage (US$0.021/GB-mes; Free incluye 1 GB, Pro 100 GB).</p>
+    </div>
+    <div class="panel" style="margin-top:18px">
+      <div class="row" style="justify-content:space-between;margin-bottom:8px"><h2 style="margin:0">Ritmo de descarga (cola)</h2><div class="seg" id="ritmoPre"><button data-p="suave">Suave</button><button data-p="normal">Normal</button><button data-p="rapido">Rápido</button></div></div>
+      <p class="note" style="margin-bottom:10px">Controla cuánto se parece a un humano bajando sus fotos. Las descargas salen desde Vercel hacia el origen (p. ej. photoai); un ritmo alto puede hacer que el origen bloquee. Si responde 429/403, la cola se detiene sola y devuelve las fotos a pendientes.</p>
+      <form class="row" id="fRitmo">
+        <label class="f">Descargas en paralelo<select id="rConc" style="width:auto"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></label>
+        <label class="f">Pausa entre fotos (ms)<input type="text" id="rPausa" inputmode="numeric" style="width:120px"></label>
+        <label class="f">Fotos por tanda<input type="text" id="rTanda" inputmode="numeric" style="width:100px"></label>
+        <label class="f">Espera entre tandas (s)<input type="text" id="rEspera" inputmode="numeric" style="width:100px"></label>
+        <button type="submit">Guardar</button>
+      </form>
+      <p class="note" id="ritmoEst" style="margin-top:8px"></p>
     </div>
   </div>
   <div data-tab="clasif" hidden>

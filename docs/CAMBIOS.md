@@ -1,5 +1,6 @@
 # CAMBIOS · ARKAPHOTO
 
+- v0.19.0 — 2026-10-30 — ritmo de descarga configurable (paralelas, pausa entre fotos con jitter, tamaño de tanda, espera entre tandas; presets Suave/Normal/Rápido; default Suave); User-Agent de navegador; ante 429/403 del origen la cola se detiene y devuelve a pendientes (mig 14)
 - v0.18.1 — 2026-10-30 — Galerías: selector de orden (fecha de carga ↓/↑, fecha del lote ↓/↑, nombre); fecha de carga = última foto registrada del lote
 - v0.18.0 — 2026-10-30 — Inicio: tabla "Por tipo y subgrupo" (lotes, fotos, % y espacio, favoritas) con enlace a Galerías filtradas
 - v0.17.0 — 2026-10-30 — fix de escala: todas las lecturas paginadas (el tope de 1,000 filas dejaba fotos fuera de la vista); URLs firmadas solo para lo que se muestra, con caché; Galerías por páginas de 30 lotes ordenadas por fecha; Inicio muestra 100 lotes

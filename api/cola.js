@@ -41,8 +41,14 @@ export default async function handler(req, res) {
   if (accion === 'completar') return completar(admin, user, res);
   if (accion === 'analizar') return analizar(admin, user, req.body?.lotes || [], res);
 
-  const n = Math.min(Math.max(Number(req.body?.n) || 24, 1), 48);
+  // Ritmo configurado por el usuario (Admin → Ritmo de descarga)
+  const { data: rc } = await admin.from('arkaphoto_config').select('cola_concurrencia,cola_pausa_ms,cola_tanda').eq('user_id', user.id).maybeSingle();
+  const conc = Math.min(Math.max(Number(rc?.cola_concurrencia) || 1, 1), CONCURRENCIA);
+  const pausa = Math.min(Math.max(Number(rc?.cola_pausa_ms) || 0, 0), 60000);
+  const n = Math.min(Math.max(Number(req.body?.n) || Number(rc?.cola_tanda) || 12, 1), 48);
   const inicio = Date.now();
+  const dormir = ms => new Promise(r => setTimeout(r, ms));
+  const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36';
   // Toma pendientes (y "procesando" huérfanas de más de 5 min) y las marca como procesando
   const { data: lote } = await admin.from('arkaphoto_cola').select('*').eq('user_id', user.id)
     .or(`estado.eq.pendiente,and(estado.eq.procesando,procesado_en.lt.${new Date(Date.now() - 300000).toISOString()})`)
@@ -66,8 +72,12 @@ export default async function handler(req, res) {
         if (ya.has(`${t.lote}-${t.seq}`)) { await marcar(t, { estado: 'existe' }); res_.existe++; continue; }
         const u = new URL(t.url);
         if (u.protocol !== 'https:' || !hostPermitido(u.hostname)) throw Object.assign(new Error('host no permitido'), { fatal: true });
-        const r = await fetch(t.url, { redirect: 'follow' });
-        if (!r.ok) { await marcar(t, { estado: r.status === 404 ? 'error' : 'error', http_status: r.status, error: `HTTP ${r.status}`, intentos: t.intentos + 1 }); res_.error++; continue; }
+        const r = await fetch(t.url, { redirect: 'follow', headers: { 'User-Agent': UA, Accept: 'image/*,*/*;q=0.8' } });
+        if (r.status === 429 || r.status === 403) { // el origen nos frena: devolver a pendiente y cortar la tanda
+          await marcar(t, { estado: 'pendiente', http_status: r.status, error: `HTTP ${r.status} (origen frenó)`, intentos: t.intentos });
+          res_.frenado = r.status; const resto = cola.splice(0); if (resto.length) await admin.from('arkaphoto_cola').update({ estado: 'pendiente' }).in('id', resto.map(x => x.id)); return;
+        }
+        if (!r.ok) { await marcar(t, { estado: 'error', http_status: r.status, error: `HTTP ${r.status}`, intentos: t.intentos + 1 }); res_.error++; continue; }
         const buf = Buffer.from(await r.arrayBuffer());
         if (buf.length > MAX_BYTES) { await marcar(t, { estado: 'error', http_status: 413, error: 'archivo > 50 MB', intentos: MAX_INTENTOS }); res_.error++; continue; }
         const ruta = `${user.id}/${t.lote}/${t.nombre}`;
@@ -83,6 +93,7 @@ export default async function handler(req, res) {
           await admin.from('arkaphoto_lotes').upsert({ user_id: user.id, lote: t.lote, clasif_id: t.clasif_id, actualizado: new Date().toISOString() }, { onConflict: 'user_id,lote' });
         }
         await marcar(t, { estado: 'traida', http_status: 200, bytes: buf.length, error: null }); res_.traidas++;
+        if (pausa) await dormir(pausa + Math.floor(Math.random() * pausa * 0.4));
       } catch (e) {
         const intentos = t.intentos + 1;
         await marcar(t, { estado: e.fatal || intentos >= MAX_INTENTOS ? 'error' : 'pendiente', error: String(e.message || e).slice(0, 200), intentos });
@@ -90,9 +101,9 @@ export default async function handler(req, res) {
       }
     }
   };
-  await Promise.all(Array.from({ length: Math.min(CONCURRENCIA, lote.length) }, worker));
+  await Promise.all(Array.from({ length: Math.min(conc, lote.length) }, worker));
   const { count } = await admin.from('arkaphoto_cola').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('estado', 'pendiente');
-  res.status(200).json({ procesadas: lote.length, ...res_, pendientes: count ?? 0, fin: (count ?? 0) === 0, ms: Date.now() - inicio });
+  res.status(200).json({ procesadas: lote.length, ...res_, pendientes: count ?? 0, fin: (count ?? 0) === 0 && !res_.frenado, ms: Date.now() - inicio, ritmo: { conc, pausa, n } });
 }
 
 // ---- Completar lotes: para cada lote presente en la cola, sondea su tamaño en la base de su propia URL
