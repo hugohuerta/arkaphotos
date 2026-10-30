@@ -22,13 +22,8 @@ export default async function handler(req, res) {
     }
     await sb.from('arkaphoto_otp').delete().eq('email', email);
 
-    // Usuario en Supabase Auth: crearlo si es la primera vez
-    let link = await sb.auth.admin.generateLink({ type: 'magiclink', email });
-    if (link.error && /not found|does not exist/i.test(link.error.message)) {
-      const cu = await sb.auth.admin.createUser({ email, email_confirm: true });
-      if (cu.error) throw new Error(cu.error.message);
-      link = await sb.auth.admin.generateLink({ type: 'magiclink', email });
-    }
+    // El usuario ya existe (send lo validó); solo se genera el enlace para abrir sesión
+    const link = await sb.auth.admin.generateLink({ type: 'magiclink', email });
     if (link.error) throw new Error(link.error.message);
     res.status(200).json({ ok: true, token_hash: link.data.properties.hashed_token });
   } catch (e) {

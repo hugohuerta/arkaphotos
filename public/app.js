@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-const CFG = { VERSION: '0.3.0', MIGRACION_ESPERADA: 3, URL_TTL: 3600 };
+const CFG = { VERSION: '0.3.1', MIGRACION_ESPERADA: 3, URL_TTL: 3600 };
 const $ = id => document.getElementById(id);
 const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
 const MAX = 32, BUCKET = 'arkaphoto';
@@ -8,11 +8,14 @@ const toast = m => { const t=$('toast'); t.textContent=m; t.classList.add('show'
 const fmt = b => b>=1048576?(b/1048576).toFixed(2)+' MB':(b/1024).toFixed(0)+' KB';
 const esc = s => String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
+$('verLogin').textContent = 'v'+CFG.VERSION; $('verChip').textContent = 'v'+CFG.VERSION;
+
 // ---------- Supabase
-const pub = await fetch('/api/config').then(r=>r.json());
+let pub;
+try{ const r = await fetch('/api/config'); pub = await r.json(); if(!r.ok || !pub.url) throw new Error(pub.error||('HTTP '+r.status)); }
+catch(e){ ['vLogin','vApp','vGal'].forEach(id=>$(id).hidden = id!=='vLogin'); $('errEmail').textContent='No se pudo cargar la configuración: '+e.message; throw e; }
 const sb = createClient(pub.url, pub.anonKey);
 let session = null;
-$('verLogin').textContent = 'v'+CFG.VERSION; $('verChip').textContent = 'v'+CFG.VERSION;
 
 // URLs firmadas (bucket privado): una llamada por lote de rutas, válidas CFG.URL_TTL segundos
 async function firmar(rutas){

@@ -7,11 +7,16 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST' });
   const email = normEmail(req.body?.email);
   if (!emailValido(email)) return res.status(400).json({ error: 'Correo inválido' });
-  // Correo fuera de la lista blanca: misma respuesta que un envío real, sin enviar nada (no revela qué correos existen)
-  if (!emailPermitido(email)) return res.status(200).json({ ok: true, ttl: CODE_TTL_MIN, cooldown: RESEND_COOLDOWN_S });
+  // Decisión 2026-10-29: solo correos ya registrados en Supabase Auth (y en la lista blanca, si existe) reciben código.
+  // Se responde explícitamente para que el login no abra el paso del código con un correo desconocido.
+  const NO_REG = { error: 'Ese correo no está registrado en este portal' };
+  if (!emailPermitido(email)) return res.status(404).json(NO_REG);
 
   try {
     const sb = admin();
+    const { data: lista, error: lerr } = await sb.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    if (lerr) throw new Error(lerr.message);
+    if (!lista.users.some(u => (u.email || '').toLowerCase() === email)) return res.status(404).json(NO_REG);
     const { data: prev } = await sb.from('arkaphoto_otp').select('sent_at').eq('email', email).maybeSingle();
     if (prev) {
       const espera = RESEND_COOLDOWN_S - (Date.now() - new Date(prev.sent_at).getTime()) / 1000;

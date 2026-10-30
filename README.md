@@ -27,6 +27,8 @@ vercel.json              cabeceras de seguridad (CSP, HSTS, no-referrer)
 2. **Authentication → Providers → Email**: dejar habilitado (la sesión se abre con un enlace mágico generado en servidor; el correo lo manda Resend, no Supabase).
 3. Copiar de **Project Settings → API**: Project URL, anon key, service_role key.
 
+**Alta de usuarios**: Authentication → Users → Add user (con el correo). El login solo pide código a correos que existan ahí; no se autocrean.
+
 ## 1b. Resend
 
 1. Verificar el dominio desde el que saldrán los correos (DNS: SPF/DKIM).
