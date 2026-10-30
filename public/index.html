@@ -1,4 +1,4 @@
-<!-- ARKAPHOTO v0.10.2 -->
+<!-- ARKAPHOTO v0.11.0 -->
 <!doctype html>
 <html lang="es">
 <head>
@@ -360,7 +360,7 @@ section.panel.col .cover{display:block}
       <div class="panel" style="margin-bottom:14px">
         <div class="row" style="justify-content:space-between">
           <div class="row"><button id="btnSelTodos">Seleccionar todos</button><span class="note" id="selN">0 seleccionados</span></div>
-          <div class="row"><button id="btnValidarSel">Validar faltantes</button><button class="primary" id="btnMasivo">Clasificar seleccionados</button></div>
+          <div class="row"><button id="btnSondearSel" title="Vuelve a determinar el tamaño del lote en la ruta pública">Sondear tamaño</button><button id="btnValidarSel">Validar faltantes</button><button class="primary" id="btnMasivo">Clasificar seleccionados</button></div>
         </div>
         <div id="masivo" hidden class="lote-ed" style="margin-top:12px">
           <label class="f">Tipo<select id="mTipo"><option value="">—</option></select></label>
@@ -422,9 +422,6 @@ section.panel.col .cover{display:block}
         <label class="f grow">Ruta pública (AWS)
           <input type="text" id="baseUrl" placeholder="https://mi-bucket.s3.amazonaws.com/carpeta" spellcheck="false">
         </label>
-        <label class="f" style="flex:0 1 220px">Rango esperado
-          <select id="rango"><option value="16">Bloques de 16 (1–16 o 1–32)</option><option value="32">Siempre 1–32</option></select>
-        </label>
         <label class="f" style="flex:0 1 140px">Tarifa USD / GB-mes
           <input type="text" id="tarifa" inputmode="decimal">
         </label>
@@ -433,7 +430,7 @@ section.panel.col .cover{display:block}
         </label>
         <button type="submit">Guardar</button>
       </form>
-      <p class="note" style="margin-top:8px">La URL de cada faltante se arma como <span class="key">{ruta}/{archivo}</span>. Tarifa por default: Supabase Storage (US$0.021/GB-mes; Free incluye 1 GB, Pro 100 GB).</p>
+      <p class="note" style="margin-top:8px">La URL de cada faltante se arma como <span class="key">{ruta}/{archivo}</span>. El tamaño de cada lote (1, 2, 4, 8, 16 o 32) se determina sondeando la ruta de mayor a menor y se guarda por lote. Tarifa por default: Supabase Storage (US$0.021/GB-mes; Free incluye 1 GB, Pro 100 GB).</p>
     </div>
   </div>
   <div data-tab="clasif" hidden>

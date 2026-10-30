@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-const CFG = { VERSION: '0.10.2', MIGRACION_ESPERADA: 9, URL_TTL: 3600 };
+const CFG = { VERSION: '0.11.0', MIGRACION_ESPERADA: 10, URL_TTL: 3600 };
 const $ = id => document.getElementById(id);
 const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
 const MAX = 32, BUCKET = 'arkaphoto';
@@ -19,7 +19,7 @@ const sb = createClient(pub.url, pub.anonKey);
 let session = null;
 
 // ---------- estado
-const cfg = { base:'', rango:'16', tarifa:0.021, gbInc:1 };
+const cfg = { base:'', tarifa:0.021, gbInc:1 };
 const lotes = new Map();   // key -> {ts,hash,ext,items:Map(seq->{id,url,origen,bytes,favorita,ruta})}
 const raw = new Map();     // archivos locales pendientes de subir (nombre -> File)
 const bad = []; let dupes = [], lastMissing = [], galFiltro = 'todos';
@@ -94,10 +94,10 @@ $('btnSalir').addEventListener('click', async ()=>{ await sb.auth.signOut(); lot
 
 // ---------- datos
 async function cargarTodo(){
-  const { data: c } = await sb.from('arkaphoto_config').select('ruta_publica,rango,tarifa_gb_usd,gb_incluidos').maybeSingle();
-  cfg.base = (c?.ruta_publica||'').replace(/\/+$/,''); cfg.rango = c?.rango||'16';
+  const { data: c } = await sb.from('arkaphoto_config').select('ruta_publica,tarifa_gb_usd,gb_incluidos').maybeSingle();
+  cfg.base = (c?.ruta_publica||'').replace(/\/+$/,'');
   cfg.tarifa = Number(c?.tarifa_gb_usd ?? 0.021); cfg.gbInc = Number(c?.gb_incluidos ?? 1);
-  $('baseUrl').value = cfg.base; $('rango').value = cfg.rango; $('tarifa').value = cfg.tarifa; $('gbInc').value = cfg.gbInc;
+  $('baseUrl').value = cfg.base; $('tarifa').value = cfg.tarifa; $('gbInc').value = cfg.gbInc;
   await Promise.all([cargarClasif(), cargarLotesMeta(), cargarTags(), cargarImagenes()]);
 }
 async function cargarTags(){
@@ -122,7 +122,7 @@ async function cargarClasif(){
   const sel=$('fTipo'); sel.innerHTML='<option value="">Todos los tipos</option>'+hijos(null).map(t=>`<option value="${t.id}">${esc(t.nombre)}</option>`).join(''); sel.value=fil.tipo;
 }
 async function cargarLotesMeta(){
-  const { data, error } = await sb.from('arkaphoto_lotes').select('lote,nombre,clasif_id,notas,portada_seq');
+  const { data, error } = await sb.from('arkaphoto_lotes').select('lote,nombre,clasif_id,notas,portada_seq,tamano,sondeado_en');
   if(error){ toast('Error leyendo lotes: '+error.message); return; }
   lotesMeta.clear(); (data||[]).forEach(m=>lotesMeta.set(m.lote,m));
 }
@@ -182,20 +182,33 @@ async function cargarImagenes(){
 }
 $('fCfg').addEventListener('submit', async e=>{
   e.preventDefault();
-  cfg.base = $('baseUrl').value.trim().replace(/\/+$/,''); cfg.rango = $('rango').value;
+  cfg.base = $('baseUrl').value.trim().replace(/\/+$/,'');
   cfg.tarifa = parseFloat($('tarifa').value)||0; cfg.gbInc = parseFloat($('gbInc').value)||0;
-  const { error } = await sb.from('arkaphoto_config').upsert({ user_id: session.user.id, ruta_publica: cfg.base, rango: cfg.rango, tarifa_gb_usd: cfg.tarifa, gb_incluidos: cfg.gbInc, actualizado: new Date().toISOString() });
+  const { error } = await sb.from('arkaphoto_config').upsert({ user_id: session.user.id, ruta_publica: cfg.base, tarifa_gb_usd: cfg.tarifa, gb_incluidos: cfg.gbInc, actualizado: new Date().toISOString() });
   toast(error ? 'No se guardó: '+error.message : 'Configuración guardada');
 });
 
 // ---------- lógica de lotes
-function rangoEsperado(L){ const max = Math.max(...L.items.keys()); return cfg.rango==='32' ? MAX : Math.min(MAX, Math.ceil(max/16)*16); }
-function faltantes(L){ const h=rangoEsperado(L), o=[]; for(let i=1;i<=h;i++) if(!L.items.has(i)) o.push(i); return o; }
+const pow2 = n => { let p=1; while(p<n) p*=2; return Math.min(MAX,p); };
+function rangoEsperado(L, key){
+  const max = Math.max(1, ...L.items.keys()); const minimo = pow2(max);
+  const t = key ? (lotesMeta.get(key)||{}).tamano : null;
+  return t && t>=minimo ? t : minimo;
+}
+async function sondear(keys, forzar=false){
+  const lista = keys.filter(k=>lotes.has(k) && (forzar || !(lotesMeta.get(k)||{}).tamano)).map(k=>{ const L=lotes.get(k); return { lote:k, ext:L.ext, minimo: pow2(Math.max(1,...L.items.keys())) }; });
+  if(!lista.length) return 0;
+  if(!cfg.base){ toast('Sin ruta pública: se asume el tamaño por lo subido'); return 0; }
+  const r = await post('/api/sondear',{ lotes:lista },true);
+  if(!r.ok){ toast('Sondeo: '+(r.j.error||r.status)); return 0; }
+  await cargarLotesMeta(); return r.j.resultados.filter(x=>x.tamano).length;
+}
+function faltantes(L,key){ const h=rangoEsperado(L,key), o=[]; for(let i=1;i<=h;i++) if(!L.items.has(i)) o.push(i); return o; }
 const nombre = (L,n) => `${L.ts}-${L.hash}-${n}.${L.ext}`;
 const urlDe = (L,n) => (cfg.base?cfg.base+'/':'')+nombre(L,n);
-function resumenLote(L){
+function resumenLote(L,key){
   const items=[...L.items.values()];
-  return { n:items.length, traidas:items.filter(i=>i.origen==='traida').length, bytes:items.reduce((a,i)=>a+i.bytes,0), fav:items.filter(i=>i.favorita).length, ocultas:items.filter(i=>i.oculta).length, faltan:faltantes(L).length, hasta:rangoEsperado(L) };
+  return { n:items.length, traidas:items.filter(i=>i.origen==='traida').length, bytes:items.reduce((a,i)=>a+i.bytes,0), fav:items.filter(i=>i.favorita).length, ocultas:items.filter(i=>i.oculta).length, faltan:faltantes(L,key).length, hasta:rangoEsperado(L,key) };
 }
 
 // ---------- INICIO
@@ -208,7 +221,7 @@ function renderInicio(){
   const rows=[]; let mostrados=0;
   const orden=[...lotes.entries()].sort((a,b)=>fechaLote(b[0])-fechaLote(a[0]));
   for(const [key,L] of orden){
-    const r=resumenLote(L); fotos+=r.n; bytes+=r.bytes; fav+=r.fav; traidas+=r.traidas; ocultas+=r.ocultas; if(!r.faltan) completos++;
+    const r=resumenLote(L,key); fotos+=r.n; bytes+=r.bytes; fav+=r.fav; traidas+=r.traidas; ocultas+=r.ocultas; if(!r.faltan) completos++;
     const meta=lotesMeta.get(key)||{}; const ruta=rutaClasif(meta.clasif_id); const f=fechaLote(key);
     if(dfil.desde && f < new Date(dfil.desde+'T00:00:00')) continue;
     if(dfil.hasta && f > new Date(dfil.hasta+'T23:59:59')) continue;
@@ -273,7 +286,7 @@ function renderGalerias(){
   pintaCascada(); pintaTagsFiltro();
   let total=0, fav=0, visibles=0; const parts=[];
   for(const [key,L] of lotes){
-    const r=resumenLote(L); total+=r.n; fav+=r.fav;
+    const r=resumenLote(L,key); total+=r.n; fav+=r.fav;
     const meta=lotesMeta.get(key)||{};
     if(!pasaFiltro(key,L,r,meta)) continue;
     const cards=[]; const ed = editando===key; const pseq=portadaDe(key,L);
@@ -451,7 +464,10 @@ async function addFiles(list){
   await subir(elegidos);
   const nuevos=[...new Set(elegidos.map(({m})=>`${m[1]}-${m[2].toLowerCase()}`))];
   nuevos.forEach(k=>{ sesionLotes.add(k); selCarga.add(k); });
-  await cargarImagenes(); mostrarCargaTab('cargar');
+  await cargarImagenes();
+  $('upStatus').textContent += ' · Sondeando tamaño de lote en la ruta pública…';
+  const n=await sondear(nuevos); $('upStatus').textContent = $('upStatus').textContent.replace(' · Sondeando tamaño de lote en la ruta pública…', n?` · ${n} lote(s) sondeados`:'');
+  mostrarCargaTab('cargar');
 }
 function resolverDuplicados(){
   const grupos = new Map();
@@ -513,12 +529,12 @@ function render(){
   const frag=document.createDocumentFragment();
   for(const key of keys){
     const L=lotes.get(key);
-    const miss=faltantes(L), hasta=rangoEsperado(L); total+=miss.length;
+    const miss=faltantes(L,key), hasta=rangoEsperado(L,key); total+=miss.length;
     miss.forEach(n=>lastMissing.push({key,L,n}));
     const d=document.createElement('div'); d.className='lote';
     const ruta=rutaClasif((lotesMeta.get(key)||{}).clasif_id).map(c=>esc(c.nombre)).join(' › ');
     const sel = hist?selHist:selCarga;
-    d.innerHTML = `<div class="lote-head"><input type="checkbox" class="selh" data-lote="${esc(key)}" ${sel.has(key)?'checked':''}><span class="etq" style="font-size:.9rem" title="${esc(key)}">${esc(etiqueta(key))}</span><span class="ruta">${ruta||'<span class="pill warn">sin clasificar</span>'}</span><span class="pill ${miss.length?'miss':'ok'}">${miss.length?miss.length+' faltantes':'completo'}</span><span class="pill warn">${L.items.size} de ${hasta}</span></div>`;
+    d.innerHTML = `<div class="lote-head"><input type="checkbox" class="selh" data-lote="${esc(key)}" ${sel.has(key)?'checked':''}><span class="etq" style="font-size:.9rem" title="${esc(key)}">${esc(etiqueta(key))}</span><span class="ruta">${ruta||'<span class="pill warn">sin clasificar</span>'}</span><span class="pill ${miss.length?'miss':'ok'}">${miss.length?miss.length+' faltantes':'completo'}</span><span class="pill warn" title="${(lotesMeta.get(key)||{}).sondeado_en?'tamaño sondeado en la ruta pública':'tamaño asumido por lo subido (sin sondear)'}">${L.items.size} de ${hasta}${(lotesMeta.get(key)||{}).sondeado_en?'':' ?'}</span></div>`;
     const g=document.createElement('div'); g.className='seq';
     for(let i=1;i<=MAX;i++){
       const c=document.createElement('div'); c.className='cell'; c.dataset.n=i;
@@ -539,8 +555,8 @@ function render(){
   $('sFalt').textContent=total;
   $('pregunta').hidden = true; $('faltantes').hidden = true;
   $('faltanBanner').hidden = hist || total===0;
-  if(!hist && total) $('faltanTxt').textContent = `Faltan ${total} foto${total===1?'':'s'} en ${keys.filter(k=>faltantes(lotes.get(k)).length).length} lote(s) de esta carga`;
-  if(total) $('preguntaTxt').textContent = `Hay ${total} imágenes faltantes en ${keys.filter(k=>faltantes(lotes.get(k)).length).length} lote(s). ¿Quieres que validemos si existen en la ruta pública?`;
+  if(!hist && total) $('faltanTxt').textContent = `Faltan ${total} foto${total===1?'':'s'} en ${keys.filter(k=>faltantes(lotes.get(k),k).length).length} lote(s) de esta carga`;
+  if(total) $('preguntaTxt').textContent = `Hay ${total} imágenes faltantes en ${keys.filter(k=>faltantes(lotes.get(k),k).length).length} lote(s). ¿Quieres que validemos si existen en la ruta pública?`;
   $('noRec').hidden = bad.length===0; $('badList').textContent = bad.join('\n');
   $('dupSec').hidden = dupes.length===0;
   const dl=$('dupList'); dl.replaceChildren();
@@ -565,9 +581,11 @@ $('btnSelTodos').addEventListener('click', ()=>{ const todos=[...lotes.keys()]; 
 $('btnMasivo').addEventListener('click', ()=>{ if(!selHist.size){ toast('Selecciona al menos un lote'); return; } $('masivo').hidden=false; });
 $('btnMasivoNo').addEventListener('click', ()=>{ $('masivo').hidden=true; });
 $('btnMasivoOk').addEventListener('click', async ()=>{ const cid=cascMasivo.valor(); if(!cid){ toast('Elige al menos el Tipo'); return; } const n=await clasificarLotes([...selHist].filter(k=>lotes.has(k)), cid); toast(`${n} lote(s) clasificados`); $('masivo').hidden=true; selHist.clear(); render(); });
-$('btnValidarSel').addEventListener('click', ()=>{
+$('btnSondearSel').addEventListener('click', async ()=>{ const keys=(selHist.size?[...selHist]:[...lotes.keys()]).filter(k=>lotes.has(k)); toast('Sondeando…'); const n=await sondear(keys,true); toast(`${n} lote(s) sondeados`); render(); });
+$('btnValidarSel').addEventListener('click', async ()=>{
   const keys=(selHist.size?[...selHist]:[...lotes.keys()]).filter(k=>lotes.has(k));
-  lastMissing=[]; keys.forEach(key=>{ const L=lotes.get(key); faltantes(L).forEach(n=>lastMissing.push({key,L,n})); });
+  await sondear(keys); render();
+  lastMissing=[]; keys.forEach(key=>{ const L=lotes.get(key); faltantes(L,key).forEach(n=>lastMissing.push({key,L,n})); });
   if(!lastMissing.length){ toast('Sin faltantes en '+(selHist.size?'los seleccionados':'ningún lote')); $('faltantes').hidden=true; return; }
   $('btnSi').click();
 });
@@ -729,7 +747,7 @@ async function verificarSistema(){
     fila('/api/version', j.version===CFG.VERSION?'ok':'warn', `backend v${j.version} (header ${h||'—'}) · frontend v${CFG.VERSION}`);
     fila('migración', j.migracion_aplicada===CFG.MIGRACION_ESPERADA?'ok':j.migracion_aplicada>CFG.MIGRACION_ESPERADA?'warn':'bad', `aplicada ${j.migracion_aplicada ?? '?'} · esperada ${CFG.MIGRACION_ESPERADA}`);
   }catch(e){ fila('/api/version','bad','sin respuesta: '+e.message); }
-  for(const ep of ['/api/config','/api/auth/send','/api/auth/verify','/api/traer']){
+  for(const ep of ['/api/config','/api/auth/send','/api/auth/verify','/api/traer','/api/sondear']){
     try{ const r=await fetch(ep,{method:ep==='/api/config'?'GET':'POST',headers:{'Content-Type':'application/json'},body:ep==='/api/config'?undefined:'{}'}); const h=r.headers.get('x-app-version');
       fila(ep, h===CFG.VERSION?'ok':h?'warn':'bad', h?`v${h}`:'sin x-app-version'); }catch(e){ fila(ep,'bad','sin respuesta'); }
   }

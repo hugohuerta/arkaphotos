@@ -1,12 +1,12 @@
 # ESTADO · ARKAPHOTO
 
-Sesión: ARKAPHOTO — organizador de lotes · Versión: v0.10.2 · Última migración: 09 (`supabase/09_ocultas_portada.sql`) · Actualizado: 2026-10-29
+Sesión: ARKAPHOTO — organizador de lotes · Versión: v0.11.0 · Última migración: 10 (`supabase/10_tamano_lote.sql`) · Actualizado: 2026-10-29
 
 ## 1. Qué es
 Organizador personal de imágenes de un generador. Sube lotes `<ts>-<hash>-<seq>.<ext>` (seq 1–32), detecta posiciones faltantes, las trae de una ruta pública (AWS) y guarda todo en Supabase Storage. Un solo usuario.
 
 ## 1.4 Decisiones
-- 2026-10-29 · Rango esperado por lote: bloques de 16 (máx ≤16 → 1–16; >16 → 1–32), configurable a "siempre 32".
+- 2026-10-30 · Tamaño del lote (sustituye a "bloques de 16"): potencia de 2. Se sondea la ruta pública con HEAD en orden 32 → 16 → 8 → 4 → 2; la primera que existe fija el tamaño; si ninguna, 1. Nunca por debajo de pow2(máx subido). Resultado en `arkaphoto_lotes.tamano` + `sondeado_en`; sin sondeo se asume pow2(máx subido) y se marca con "?". `config.rango` queda sin uso.
 - 2026-10-29 · Copias "(n)": mismo tamaño que la original → se ignora; sin original → se procesa con nombre limpio; tamaño distinto → se conserva la original y se marca para revisar.
 - 2026-10-29 · Bucket: Supabase Storage **privado** (v0.3.0; antes público). Lectura con URLs firmadas de 1 h; escritura solo del dueño. R2 si crece el volumen.
 - 2026-10-29 · Prioridades de seguridad acordadas: lista blanca → cabeceras/Deployment Protection → bucket privado → hosts permitidos → respaldo del bucket (fuera del stack, pendiente).
@@ -28,7 +28,7 @@ Organizador personal de imágenes de un generador. Sube lotes `<ts>-<hash>-<seq>
 ## 2. Estado por pieza
 | Pieza | Versión | Estado |
 |---|---|---|
-| `public/index.html` + `public/app.js` | v0.10.2 | clasificación en Admin; editor por galería; etiquetas de lote |
+| `public/index.html` + `public/app.js` | v0.11.0 | clasificación en Admin; editor por galería; etiquetas de lote |
 | `api/*` | v0.4.0 | `/api/traer` acepta lote+seqs o urls[] |
 | `api/auth/*` | v0.3.2 | login real confirmado por Hugo (2026-10-29 22:43) |
 | mig 01, 02 | — | aplicadas (2910.1, verificado por el chat vía MCP) |
@@ -39,6 +39,7 @@ Organizador personal de imágenes de un generador. Sube lotes `<ts>-<hash>-<seq>
 | mig 07 | — | aplicada por el chat vía MCP (2910.11): arkaphoto_tags, arkaphoto_lote_tags |
 | mig 08 | — | aplicada por el chat vía MCP (2910.12): imagenes.clasif_id + triggers de propagación/herencia; 32/32 fotos rellenadas |
 | mig 09 | — | aplicada por el chat vía MCP (2910.13): imagenes.oculta, lotes.portada_seq |
+| mig 10 | — | aplicada por el chat vía MCP (3010.1): lotes.tamano, sondeado_en |
 
 ## 3.5 Asumidos
 - [asumido] 2026-10-29 · variables de Vercel configuradas: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, RESEND_API_KEY, RESEND_FROM (el proyecto de Vercel no es visible desde el MCP del chat).
