@@ -34,10 +34,9 @@ export async function existeSeq(base, lote, seq) {
 
 // GET de una posición probando png y luego jpg. Devuelve { r, ext } con la primera respuesta que no sea 404 (o la última).
 export async function bajarSeq(url, ext, headers) {
-  const orden = [...PREFERENCIA].filter(e => e !== (ext === 'jpeg' ? 'jpg' : ext)); orden.unshift(ext === 'jpeg' ? 'jpg' : ext);
-  const porPref = [...PREFERENCIA, ...orden.filter(e => !PREFERENCIA.includes(e))];
+  const orden = [...PREFERENCIA]; if (ext === 'jpeg') orden.push('jpeg'); // respeta .jpeg literal si así se listó
   let ultimo = null;
-  for (const e of porPref) {
+  for (const e of orden) {
     const r = await fetch(conExt(url, e), { redirect: 'follow', headers });
     if (r.status !== 404) return { r, ext: e };
     ultimo = { r, ext: e };
