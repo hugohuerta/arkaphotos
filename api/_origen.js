@@ -22,12 +22,27 @@ async function existe(url) {
   } catch { return false; }
 }
 
-// ¿Existe la posición seq del lote en base? Devuelve la extensión con la que respondió o null.
-export async function existeSeq(base, lote, seq, ext) {
-  if (await existe(`${base}/${lote}-${seq}.${ext}`)) return ext;
-  const a = alterna(ext);
-  if (await existe(`${base}/${lote}-${seq}.${a}`)) return a;
+// Orden de preferencia al buscar una posición en el origen: PNG (mejor calidad) antes que JPG,
+// independientemente de la extensión con la que se listó o se subió la foto.
+export const PREFERENCIA = ['png', 'jpg'];
+
+// ¿Existe la posición seq del lote en base? Devuelve la extensión con la que respondió (png primero) o null.
+export async function existeSeq(base, lote, seq) {
+  for (const e of PREFERENCIA) if (await existe(`${base}/${lote}-${seq}.${e}`)) return e;
   return null;
+}
+
+// GET de una posición probando png y luego jpg. Devuelve { r, ext } con la primera respuesta que no sea 404 (o la última).
+export async function bajarSeq(url, ext, headers) {
+  const orden = [...PREFERENCIA].filter(e => e !== (ext === 'jpeg' ? 'jpg' : ext)); orden.unshift(ext === 'jpeg' ? 'jpg' : ext);
+  const porPref = [...PREFERENCIA, ...orden.filter(e => !PREFERENCIA.includes(e))];
+  let ultimo = null;
+  for (const e of porPref) {
+    const r = await fetch(conExt(url, e), { redirect: 'follow', headers });
+    if (r.status !== 404) return { r, ext: e };
+    ultimo = { r, ext: e };
+  }
+  return ultimo;
 }
 
 // Tamaño del lote (potencia de 2): 32 → 16 → 8 → 4 → 2, nunca por debajo de `minimo`; prueba ambas extensiones en cada paso.
@@ -36,7 +51,7 @@ export async function sondearTamano(base, lote, ext, minimo) {
   for (const t of ESCALA) {
     if (t <= minimo) break;
     probadas.push(t);
-    const e = await existeSeq(base, lote, t, ext);
+    const e = await existeSeq(base, lote, t);
     if (e) { tamano = t; extHallada = e; break; }
   }
   return { tamano, probadas, extHallada };

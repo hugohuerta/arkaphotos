@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-const CFG = { VERSION: '0.21.0', MIGRACION_ESPERADA: 14, URL_TTL: 3600 };
+const CFG = { VERSION: '0.22.0', MIGRACION_ESPERADA: 14, URL_TTL: 3600 };
 const $ = id => document.getElementById(id);
 const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
 const MAX = 32, BUCKET = 'arkaphoto';
@@ -259,9 +259,13 @@ async function sondear(keys, forzar=false){
   const lista = keys.filter(k=>lotes.has(k) && (forzar || !(lotesMeta.get(k)||{}).tamano)).map(k=>{ const L=lotes.get(k); return { lote:k, ext:L.ext, minimo: pow2(Math.max(1,...L.items.keys())) }; });
   if(!lista.length) return 0;
   if(!cfg.base){ toast('Sin ruta pública: se asume el tamaño por lo subido'); return 0; }
-  const r = await post('/api/sondear',{ lotes:lista },true);
-  if(!r.ok){ toast('Sondeo: '+(r.j.error||r.status)); return 0; }
-  await cargarLotesMeta(); return r.j.resultados.filter(x=>x.tamano).length;
+  let n=0;
+  for(let i=0;i<lista.length;i+=32){
+    const r = await post('/api/sondear',{ lotes:lista.slice(i,i+32) },true);
+    if(!r.ok){ toast('Sondeo: '+(r.j.error||r.status)); break; }
+    n+=r.j.resultados.filter(x=>x.tamano).length;
+  }
+  await cargarLotesMeta(); return n;
 }
 function faltantes(L,key){ const h=rangoEsperado(L,key), o=[]; for(let i=1;i<=h;i++) if(!L.items.has(i)) o.push(i); return o; }
 const nombre = (L,n) => `${L.ts}-${L.hash}-${n}.${L.ext}`;
@@ -561,6 +565,14 @@ async function addFiles(list){
   const nuevos=[...new Set(elegidos.map(({m})=>`${m[1]}-${m[2].toLowerCase()}`))];
   nuevos.forEach(k=>{ sesionLotes.add(k); selCarga.add(k); });
   await cargarImagenes();
+  // Mejor calidad primero: para lo subido en JPG, si el origen tiene la misma posición en PNG se reemplaza
+  if(cfg.base){
+    const porLote=new Map(); elegidos.forEach(({m})=>{ if(m[5].toLowerCase()==='png') return; const k=`${m[1]}-${m[2].toLowerCase()}`; if(!porLote.has(k)) porLote.set(k,[]); porLote.get(k).push(parseInt(m[3],10)); });
+    let mej=0, disp=0, i=0;
+    for(const [k,seqs] of porLote){ $('upStatus').textContent=`Buscando PNG en el origen… lote ${++i} de ${porLote.size}`; const r=await post('/api/mejorar',{ lote:k, seqs, aplicar:true },true); if(r.ok){ mej+=r.j.mejoradas.length; disp+=r.j.disponibles.length; } }
+    if(porLote.size) await cargarImagenes();
+    $('upStatus').textContent = `${elegidos.length} imágenes subidas.` + (mej?` ${mej} reemplazadas por su PNG del origen (mejor calidad).`:disp?` ${disp} PNG disponibles no se pudieron reemplazar.`:' Sin PNG mejor en el origen.');
+  }
   $('upStatus').textContent += ' · Sondeando tamaño de lote en la ruta pública…';
   const n=await sondear(nuevos); $('upStatus').textContent = $('upStatus').textContent.replace(' · Sondeando tamaño de lote en la ruta pública…', n?` · ${n} lote(s) sondeados`:'');
   mostrarCargaTab('cargar');
@@ -634,7 +646,7 @@ function render(){
     const d=document.createElement('div'); d.className='lote'; d.dataset.lote=key;
     const ruta=rutaClasif((lotesMeta.get(key)||{}).clasif_id).map(c=>esc(c.nombre)).join(' › ');
     const sel = hist?selHist:selCarga;
-    d.innerHTML = `<div class="lote-head"><input type="checkbox" class="selh" data-lote="${esc(key)}" ${sel.has(key)?'checked':''}><span class="etq" style="font-size:.9rem" title="${esc(key)}">${esc(etiqueta(key))}</span><span class="ruta">${ruta||'<span class="pill warn">sin clasificar</span>'}</span><span class="pill ${miss.length?'miss':'ok'}">${miss.length?miss.length+' faltantes':'completo'}</span>${barra(L.items.size, hasta, !!(lotesMeta.get(key)||{}).sondeado_en)}</div>`;
+    d.innerHTML = `<div class="lote-head"><input type="checkbox" class="selh" data-lote="${esc(key)}" ${sel.has(key)?'checked':''}><span class="etq" style="font-size:.9rem" title="${esc(key)}">${esc(etiqueta(key))}</span><span class="ruta">${ruta||'<span class="pill warn">sin clasificar</span>'}</span><span class="pill ${miss.length?'miss':'ok'}">${miss.length?miss.length+' faltantes':'completo'}</span>${barra(L.items.size, hasta, !!(lotesMeta.get(key)||{}).sondeado_en)}${hist?`<button class="chico validar" data-lote="${esc(key)}" title="Vuelve a sondear 32/16/8/4/2 con ambas extensiones, lista faltantes y busca PNG de mejor calidad">Validar</button>`:''}</div><div class="valres" hidden></div>`;
     const g=document.createElement('div'); g.className='seq';
     for(let i=1;i<=MAX;i++){
       const c=document.createElement('div'); c.className='cell'; c.dataset.n=i;
@@ -663,6 +675,29 @@ function render(){
   const dl=$('dupList'); dl.replaceChildren();
   dupes.forEach(d=>{ const li=document.createElement('li'); li.innerHTML=`<span class="n ${d.ok?'okc':''}">${d.ok?'✓':'!'}</span><span>${esc(d.name)}</span><span class="note">${esc(d.estado)}</span>`; dl.appendChild(li); });
 }
+// Validar un lote individual: resondeo forzado (ambas extensiones) + faltantes + PNG disponibles para las JPG
+async function validarLote(key, btn){
+  if(!cfg.base){ toast('Configura la ruta pública en Admin'); return; }
+  btn.disabled=true; const caja=btn.closest('.lote').querySelector('.valres'); caja.hidden=false; caja.textContent='Sondeando 32 → 16 → 8 → 4 → 2 con .png y .jpg…';
+  try{
+    await cargarImagenes(); await cargarLotesMeta(); await sondear([key],true);
+    const L=lotes.get(key); const meta=lotesMeta.get(key)||{}; const miss=faltantes(L,key); const tam=meta.tamano||rangoEsperado(L,key);
+    caja.textContent='Buscando PNG de mejor calidad en el origen…';
+    const jpgs=[...L.items.entries()].filter(([,it])=>!/\.png$/i.test(it.ruta||'')).length;
+    let mej={disponibles:[]}; if(jpgs){ const r=await post('/api/mejorar',{ lote:key, aplicar:false },true); if(r.ok) mej=r.j; }
+    render(); // re-pinta la fila con el nuevo tamaño
+    const caja2=document.querySelector(`#histLotes .lote[data-lote="${CSS.escape(key)}"] .valres`); if(!caja2) return; caja2.hidden=false;
+    caja2.innerHTML=`<b>Tamaño en el origen: ${tam}</b> · tiene ${L.items.size} · faltan ${miss.length}${miss.length?` (${miss.join(', ')})`:''} · ${jpgs} en JPG, ${mej.disponibles.length} con PNG en el origen`
+      +(miss.length?` <button class="chico" data-act="traer" data-lote="${esc(key)}">Traer ${miss.length} faltantes</button>`:'')
+      +(mej.disponibles.length?` <button class="chico" data-act="mejorar" data-lote="${esc(key)}">Reemplazar ${mej.disponibles.length} por PNG</button>`:'');
+  } finally { btn.disabled=false; }
+}
+$('histLotes').addEventListener('click', async e=>{
+  const b=e.target.closest('button[data-lote]'); if(!b) return; const key=b.dataset.lote;
+  if(b.classList.contains('validar')) return validarLote(key,b);
+  if(b.dataset.act==='traer'){ const L=lotes.get(key); lastMissing=faltantes(L,key).map(n=>({key,L,n})); $('btnSi').click(); return; }
+  if(b.dataset.act==='mejorar'){ b.disabled=true; b.textContent='Reemplazando…'; const r=await post('/api/mejorar',{ lote:key, aplicar:true },true); toast(r.ok?`${r.j.mejoradas.length} reemplazadas por PNG${r.j.errores.length?` · ${r.j.errores.length} errores`:''}`:'Mejorar: '+(r.j.error||r.status)); await cargarImagenes(); render(); }
+});
 $('histLotes').addEventListener('change', e=>{ const c=e.target.closest('input.selh'); if(!c) return; c.checked?selHist.add(c.dataset.lote):selHist.delete(c.dataset.lote); $('selN').textContent=`${selHist.size} seleccionados`; });
 $('lotes').addEventListener('change', e=>{ const c=e.target.closest('input.selh'); if(!c) return; c.checked?selCarga.add(c.dataset.lote):selCarga.delete(c.dataset.lote); $('cSelN').textContent=`${selCarga.size} de ${sesionLotes.size} seleccionados`; });
 $('btnCargaOk').addEventListener('click', async ()=>{
@@ -687,7 +722,7 @@ $('btnSondearSel').addEventListener('click', async ()=>{ const keys=(selHist.siz
 $('btnValidarSel').addEventListener('click', async ()=>{
   await cargarImagenes(); await cargarLotesMeta();
   const keys=(selHist.size?[...selHist]:[...lotes.keys()]).filter(k=>lotes.has(k));
-  await sondear(keys); render();
+  await sondear(keys, selHist.size>0); render(); // con selección: resondeo forzado (ambas extensiones); sin selección: solo los no sondeados
   lastMissing=[]; keys.forEach(key=>{ const L=lotes.get(key); faltantes(L,key).forEach(n=>lastMissing.push({key,L,n})); });
   if(!lastMissing.length){ toast('Sin faltantes en '+(selHist.size?'los seleccionados':'ningún lote')); $('faltantes').hidden=true; return; }
   $('btnSi').click();

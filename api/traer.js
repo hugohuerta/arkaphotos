@@ -6,7 +6,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { conVersion } from './_version.js';
 import { dimensiones } from './_dims.js';
-import { hostPermitido, alterna, conExt, UA } from './_origen.js';
+import { hostPermitido, conExt, UA, bajarSeq } from './_origen.js';
 
 export const config = { maxDuration: 60 };
 
@@ -82,12 +82,9 @@ export default async function handler(req, res) {
     while (cola.length) {
       const t = cola.shift();
       try {
-        let r = await fetch(t.url, { redirect: 'follow', headers: { 'User-Agent': UA, Accept: 'image/*,*/*;q=0.8' } });
-        if (r.status === 404) { // el lote puede mezclar .jpg y .png: probar la otra extensión antes de darla por inexistente
-          const a = alterna(t.ext), ua = conExt(t.url, a);
-          const ra = await fetch(ua, { redirect: 'follow', headers: { 'User-Agent': UA, Accept: 'image/*,*/*;q=0.8' } });
-          if (ra.ok) { r = ra; Object.assign(t, { ext: a, url: ua, nombre: `${t.lote}-${t.seq}.${a}`, extAlterna: true }); }
-        }
+        // Preferencia PNG > JPG independientemente de la extensión listada; el lote puede mezclar ambas
+        const { r, ext: e } = await bajarSeq(t.url, t.ext, { 'User-Agent': UA, Accept: 'image/*,*/*;q=0.8' });
+        if (r.ok && e !== t.ext) Object.assign(t, { ext: e, url: conExt(t.url, e), nombre: `${t.lote}-${t.seq}.${e}`, extAlterna: true });
         if (!r.ok) { Object.assign(t, { ok: false, status: r.status }); continue; }
         const buf = Buffer.from(await r.arrayBuffer());
         if (buf.length > MAX_BYTES) { Object.assign(t, { ok: false, status: 413 }); continue; }

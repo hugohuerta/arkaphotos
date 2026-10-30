@@ -5,7 +5,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { conVersion } from './_version.js';
 import { dimensiones } from './_dims.js';
-import { ESCALA, pow2, hostPermitido, alterna, conExt, UA, sondearTamano } from './_origen.js';
+import { pow2, hostPermitido, conExt, UA, sondearTamano, bajarSeq } from './_origen.js';
 
 export const config = { maxDuration: 60 };
 const MAX_BYTES = 50 * 1024 * 1024;
@@ -82,13 +82,10 @@ export default async function handler(req, res) {
         if (ya.has(`${t.lote}-${t.seq}`)) { await marcar(t, { estado: 'existe' }); res_.existe++; continue; }
         const u = new URL(t.url);
         if (u.protocol !== 'https:' || !hostPermitido(u.hostname)) throw Object.assign(new Error('host no permitido'), { fatal: true });
-        let r = await fetch(t.url, { redirect: 'follow', headers: cab });
-        if (r.status === 404) { // probar la otra extensión antes de darla por inexistente
-          const a = alterna(t.ext), ua = conExt(t.url, a);
-          const ra = await fetch(ua, { redirect: 'follow', headers: cab });
-          if (ra.ok) { r = ra; Object.assign(t, { ext: a, url: ua, nombre: `${t.lote}-${t.seq}.${a}` }); await marcar(t, { ext: a, url: ua, nombre: t.nombre }); res_.extAlterna++; await resondear(t); }
-          else if (ra.status === 404) { await marcar(t, { estado: 'error', http_status: 404, error: 'no existe en la ruta (ni .jpg ni .png): no recuperable desde la web', intentos: MAX_INTENTOS }); res_.noexiste++; continue; }
-        }
+        // Preferencia PNG > JPG independientemente de la extensión listada; el lote puede mezclar ambas
+        const { r, ext: e } = await bajarSeq(t.url, t.ext, cab);
+        if (r.ok && e !== t.ext) { Object.assign(t, { ext: e, url: conExt(t.url, e), nombre: `${t.lote}-${t.seq}.${e}` }); await marcar(t, { ext: e, url: t.url, nombre: t.nombre }); res_.extAlterna++; await resondear(t); }
+        if (r.status === 404) { await marcar(t, { estado: 'error', http_status: 404, error: 'no existe en la ruta (ni .png ni .jpg): no recuperable desde la web', intentos: MAX_INTENTOS }); res_.noexiste++; continue; }
         if (r.status === 429 || r.status === 403) { // el origen nos frena: devolver a pendiente y cortar la tanda
           await marcar(t, { estado: 'pendiente', http_status: r.status, error: `HTTP ${r.status} (origen frenó)`, intentos: t.intentos });
           res_.frenado = r.status; const resto = cola.splice(0); if (resto.length) await admin.from('arkaphoto_cola').update({ estado: 'pendiente' }).in('id', resto.map(x => x.id)); return;

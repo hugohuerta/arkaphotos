@@ -1,6 +1,6 @@
 # ESTADO · ARKAPHOTO
 
-Sesión: ARKAPHOTO — organizador de lotes · Versión: v0.21.0 · Última migración: 14 (`supabase/14_ritmo_cola.sql`) · Actualizado: 2026-10-29
+Sesión: ARKAPHOTO — organizador de lotes · Versión: v0.22.0 · Última migración: 14 (`supabase/14_ritmo_cola.sql`) · Actualizado: 2026-10-29
 
 ## 1. Qué es
 Organizador personal de imágenes de un generador. Sube lotes `<ts>-<hash>-<seq>.<ext>` (seq 1–32), detecta posiciones faltantes, las trae de una ruta pública (AWS) y guarda todo en Supabase Storage. Un solo usuario.
@@ -26,6 +26,7 @@ Organizador personal de imágenes de un generador. Sube lotes `<ts>-<hash>-<seq>
 - 2026-10-30 · Analizar (Carga de URL): el navegador agrupa por lote y manda tandas de 60 lotes a `/api/cola accion=analizar`, que sondea (6 en paralelo, 45 s) usando el tamaño ya guardado cuando existe, y devuelve faltan/existen/encoladas por lote; el navegador encola de 500 en 500. Las URLs listadas que ya existen no se vuelven a bajar.
 - 2026-10-30 · Completar lotes (cola, acción `completar` conservada en la API aunque ya sin botón): la base de la URL de cada lote actúa como su ruta pública; sondeo con la misma regla; lotes ya sondeados no se repiten; las posiciones encoladas llevan origen_archivo='completar'.
 - 2026-10-30 · Escala: PostgREST limita a 1,000 filas por consulta; `todas()` pagina con `range`. Las URLs firmadas se piden por lote al renderizar (`asegurarUrls`/`hidratarImgs`), con caché en memoria hasta 5 min antes de caducar. Galerías pagina 30 lotes ("Mostrar más"); Inicio lista 100. Estado al corregirlo: 2,570 fotos, 254 lotes, 6.2 GB.
+- 2026-10-30 · Calidad: al buscar una posición en el origen siempre se prueba .png antes que .jpg, sin importar la extensión listada o subida. Tras una subida en JPG se busca el PNG en el origen y, si existe, se reemplaza (objeto en Storage + fila). Costo: un 404 extra por foto en lotes solo-JPG; aceptado.
 - 2026-10-30 · Un lote de photoai puede mezclar .jpg y .png. Regla: toda comprobación contra el origen prueba la extensión esperada y, ante 404, la alterna; si la alterna responde, el tamaño del lote se vuelve a sondear con ambas. `ext` vive por imagen (ya era así en la tabla); el cliente sigue usando la del lote para nombrar faltantes, que TRAER corrige al bajar.
 - 2026-10-30 · Las fotos de los archivos de Hugo viven en `r2-us-west.photoai.com` (R2 de photoai), no en un bucket propio de AWS: el riesgo de descarga masiva es que photoai/Cloudflare bloquee las IPs de Vercel o su cuenta. Ritmo default Suave (1 paralela, 1.5 s ± jitter, tandas de 12, 10 s entre tandas ≈ 700–800 fotos/h). La cola se autodetiene ante 429/403.
 - 2026-10-29 · Single-file con excepción: el JS vive en `public/app.js` porque la CSP no permite script inline.
@@ -35,7 +36,7 @@ Organizador personal de imágenes de un generador. Sube lotes `<ts>-<hash>-<seq>
 ## 2. Estado por pieza
 | Pieza | Versión | Estado |
 |---|---|---|
-| `public/index.html` + `public/app.js` | v0.21.0 | clasificación en Admin; editor por galería; etiquetas de lote |
+| `public/index.html` + `public/app.js` | v0.22.0 | clasificación en Admin; editor por galería; etiquetas de lote |
 | `api/*` | v0.4.0 | `/api/traer` acepta lote+seqs o urls[] |
 | `api/auth/*` | v0.3.2 | login real confirmado por Hugo (2026-10-29 22:43) |
 | mig 01, 02 | — | aplicadas (2910.1, verificado por el chat vía MCP) |

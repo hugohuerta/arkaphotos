@@ -1,4 +1,4 @@
-<!-- ARKAPHOTO v0.21.0 -->
+<!-- ARKAPHOTO v0.22.0 -->
 <!doctype html>
 <html lang="es">
 <head>
@@ -234,6 +234,10 @@ tr.sub td:first-child{color:transparent}
 .gc figcaption{display:flex;gap:8px;align-items:center;padding:6px 8px;font-size:.78rem;font-family:var(--mono)}
 .gc figcaption a{margin-left:auto;color:var(--accent)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+button.chico{padding:3px 9px;font-size:12px;margin-left:auto}
+.valres{margin:6px 0 2px;font-size:13px;color:var(--muted)}
+.valres b{color:var(--fg)}
+.valres button.chico{margin-left:6px}
 td.cl select{width:auto;max-width:150px;padding:4px 6px;font-size:12px}
 td.cl{white-space:nowrap}
 .ok-flash{background:color-mix(in srgb,var(--ok) 18%,transparent);transition:background .6s}
@@ -384,7 +388,7 @@ td.cl{white-space:nowrap}
       <div class="panel" style="margin-bottom:14px">
         <div class="row" style="justify-content:space-between">
           <div class="row"><div class="seg" id="histFiltro"><button class="on" data-f="todos">Todos</button><button data-f="incompletos">Incompletos</button><button data-f="completos">Completos</button><button data-f="sinclasif">Sin clasificar</button><button data-f="sinsondear">Sin sondear</button></div><button id="btnSelTodos">Seleccionar visibles</button><span class="note" id="selN">0 seleccionados</span></div>
-          <div class="row"><button id="btnSondearSel" title="Vuelve a determinar el tamaño del lote en la ruta pública">Sondear tamaño</button><button id="btnValidarSel">Validar faltantes</button><button class="primary" id="btnMasivo">Clasificar seleccionados</button></div>
+          <div class="row"><button id="btnSondearSel" title="Vuelve a determinar el tamaño del lote en la ruta pública">Sondear tamaño</button><button id="btnValidarSel" title="Con selección: resondea 32/16/8/4/2 con ambas extensiones y lista faltantes">Validar faltantes</button><button class="primary" id="btnMasivo">Clasificar seleccionados</button></div>
         </div>
         <div id="masivo" hidden class="lote-ed" style="margin-top:12px">
           <label class="f">Tipo<select id="mTipo"><option value="">—</option></select></label>
