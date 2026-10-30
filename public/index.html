@@ -1,4 +1,4 @@
-<!-- ARKAPHOTO v0.13.1 -->
+<!-- ARKAPHOTO v0.13.2 -->
 <!doctype html>
 <html lang="es">
 <head>
@@ -366,7 +366,7 @@ section.panel.col .cover{display:block}
     <div data-ctab="hist" hidden>
       <div class="panel" style="margin-bottom:14px">
         <div class="row" style="justify-content:space-between">
-          <div class="row"><button id="btnSelTodos">Seleccionar todos</button><span class="note" id="selN">0 seleccionados</span></div>
+          <div class="row"><div class="seg" id="histFiltro"><button class="on" data-f="todos">Todos</button><button data-f="incompletos">Incompletos</button><button data-f="completos">Completos</button><button data-f="sinclasif">Sin clasificar</button><button data-f="sinsondear">Sin sondear</button></div><button id="btnSelTodos">Seleccionar visibles</button><span class="note" id="selN">0 seleccionados</span></div>
           <div class="row"><button id="btnSondearSel" title="Vuelve a determinar el tamaño del lote en la ruta pública">Sondear tamaño</button><button id="btnValidarSel">Validar faltantes</button><button class="primary" id="btnMasivo">Clasificar seleccionados</button></div>
         </div>
         <div id="masivo" hidden class="lote-ed" style="margin-top:12px">

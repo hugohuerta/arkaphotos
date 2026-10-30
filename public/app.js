@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-const CFG = { VERSION: '0.13.1', MIGRACION_ESPERADA: 12, URL_TTL: 3600 };
+const CFG = { VERSION: '0.13.2', MIGRACION_ESPERADA: 12, URL_TTL: 3600 };
 const $ = id => document.getElementById(id);
 const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
 const MAX = 32, BUCKET = 'arkaphoto';
@@ -25,7 +25,7 @@ const raw = new Map();     // archivos locales pendientes de subir (nombre -> Fi
 const bad = []; let dupes = [], lastMissing = [], galFiltro = 'todos';
 const fil = { tipo:'', sub:'', det:'', q:'', tag:null, fmt:'' };
 let galVista = '1x'; const colapsados = new Set(); let editando = null;
-const sesionLotes = new Set(); const selHist = new Set(); const selCarga = new Set(); let cargaTab = 'cargar';
+const sesionLotes = new Set(); const selHist = new Set(); const selCarga = new Set(); let cargaTab = 'cargar', histFiltro = 'todos';
 try{ galVista = localStorage.getItem('arkaphoto-vista')||'1x'; JSON.parse(localStorage.getItem('arkaphoto-colapsados')||'[]').forEach(k=>colapsados.add(k)); }catch{}
 const guardaColapsados = ()=>{ try{ localStorage.setItem('arkaphoto-colapsados', JSON.stringify([...colapsados])); }catch{} };
 const tags = new Map();        // id -> {id,nombre}
@@ -538,7 +538,10 @@ $('cargaTabs').addEventListener('click', e=>{ const b=e.target.closest('button[d
 
 function render(){
   const hist = cargaTab==='hist';
-  const keys = hist ? [...lotes.keys()] : [...sesionLotes].filter(k=>lotes.has(k));
+  let keys = hist ? [...lotes.keys()] : [...sesionLotes].filter(k=>lotes.has(k));
+  if(hist && histFiltro!=='todos') keys = keys.filter(k=>{ const L=lotes.get(k), meta=lotesMeta.get(k)||{}; const f=faltantes(L,k).length;
+    return histFiltro==='incompletos' ? f>0 : histFiltro==='completos' ? f===0 : histFiltro==='sinclasif' ? !meta.clasif_id : histFiltro==='sinsondear' ? !meta.sondeado_en : true; });
+  const histTotal = lotes.size;
   const nArch=keys.reduce((a,k)=>a+lotes.get(k).items.size,0);
   $('resumen').hidden = hist || (nArch===0 && bad.length===0);
   $('lotes').hidden = hist || keys.length===0;
@@ -567,7 +570,8 @@ function render(){
     d.appendChild(g); frag.appendChild(d);
   }
   (hist?$('histLotes'):$('lotes')).replaceChildren(frag);
-  if(hist && !keys.length) $('histLotes').innerHTML='<p class="note">Aún no hay lotes.</p>';
+  if(hist && !keys.length) $('histLotes').innerHTML=`<p class="note">${histTotal?'Ningún lote cumple el filtro.':'Aún no hay lotes.'}</p>`;
+  if(hist){ const b=$('btnSelTodos'); b.textContent=`Seleccionar visibles (${keys.length})`; document.querySelectorAll('#histFiltro button').forEach(x=>x.classList.toggle('on',x.dataset.f===histFiltro)); }
   $('selN').textContent=`${[...selHist].filter(k=>lotes.has(k)).length} seleccionados`;
   $('cClasif').hidden = hist || keys.length===0;
   $('cSelN').textContent=`${[...selCarga].filter(k=>lotes.has(k)).length} de ${keys.length} seleccionados`;
@@ -596,7 +600,8 @@ $('btnNuevaCarga').addEventListener('click', async ()=>{
   $('cListo').hidden=true; $('upStatus').textContent='Listo para una nueva carga.';
   await cargarTodo(); render(); window.scrollTo({top:0,behavior:'smooth'});
 });
-$('btnSelTodos').addEventListener('click', ()=>{ const todos=[...lotes.keys()]; const quitar=todos.every(k=>selHist.has(k)); todos.forEach(k=>quitar?selHist.delete(k):selHist.add(k)); render(); });
+$('histFiltro').addEventListener('click', e=>{ const b=e.target.closest('button[data-f]'); if(!b) return; histFiltro=b.dataset.f; render(); });
+$('btnSelTodos').addEventListener('click', ()=>{ const visibles=[...document.querySelectorAll('#histLotes input.selh')].map(c=>c.dataset.lote); const quitar=visibles.length && visibles.every(k=>selHist.has(k)); visibles.forEach(k=>quitar?selHist.delete(k):selHist.add(k)); render(); });
 $('btnMasivo').addEventListener('click', ()=>{ if(!selHist.size){ toast('Selecciona al menos un lote'); return; } $('masivo').hidden=false; });
 $('btnMasivoNo').addEventListener('click', ()=>{ $('masivo').hidden=true; });
 $('btnMasivoOk').addEventListener('click', async ()=>{ const cid=cascMasivo.valor(); if(!cid){ toast('Elige al menos el Tipo'); return; } const n=await clasificarLotes([...selHist].filter(k=>lotes.has(k)), cid); toast(`${n} lote(s) clasificados`); $('masivo').hidden=true; selHist.clear(); render(); });
