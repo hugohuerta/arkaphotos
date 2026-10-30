@@ -6,6 +6,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { conVersion } from './_version.js';
 import { dimensiones } from './_dims.js';
+import { hostPermitido, alterna, conExt, UA } from './_origen.js';
 
 export const config = { maxDuration: 60 };
 
@@ -14,11 +15,6 @@ const RX_NOMBRE = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})\.(jpe?g|png)$/i;
 const MAX_BYTES = 50 * 1024 * 1024;
 const CONCURRENCIA = 4;
 const MAX_URLS = 64;
-
-function hostPermitido(host) {
-  const hosts = (process.env.ALLOWED_FETCH_HOSTS || '').split(',').map(h => h.trim().toLowerCase()).filter(Boolean);
-  return !hosts.length || hosts.some(h => host === h || host.endsWith('.' + h));
-}
 
 export default async function handler(req, res) {
   conVersion(res);
@@ -86,7 +82,12 @@ export default async function handler(req, res) {
     while (cola.length) {
       const t = cola.shift();
       try {
-        const r = await fetch(t.url, { redirect: 'follow' });
+        let r = await fetch(t.url, { redirect: 'follow', headers: { 'User-Agent': UA, Accept: 'image/*,*/*;q=0.8' } });
+        if (r.status === 404) { // el lote puede mezclar .jpg y .png: probar la otra extensión antes de darla por inexistente
+          const a = alterna(t.ext), ua = conExt(t.url, a);
+          const ra = await fetch(ua, { redirect: 'follow', headers: { 'User-Agent': UA, Accept: 'image/*,*/*;q=0.8' } });
+          if (ra.ok) { r = ra; Object.assign(t, { ext: a, url: ua, nombre: `${t.lote}-${t.seq}.${a}`, extAlterna: true }); }
+        }
         if (!r.ok) { Object.assign(t, { ok: false, status: r.status }); continue; }
         const buf = Buffer.from(await r.arrayBuffer());
         if (buf.length > MAX_BYTES) { Object.assign(t, { ok: false, status: 413 }); continue; }
@@ -104,6 +105,6 @@ export default async function handler(req, res) {
   };
   await Promise.all(Array.from({ length: Math.min(CONCURRENCIA, Math.max(cola.length, 1)) }, worker));
 
-  const resultados = trabajo.map(({ url, lote, seq, nombre, ok, status, bytes, error }) => ({ url, lote, seq, nombre, ok: !!ok, status, bytes, error }));
+  const resultados = trabajo.map(({ url, lote, seq, nombre, ok, status, bytes, error, extAlterna }) => ({ url, lote, seq, nombre, ok: !!ok, status, bytes, error, extAlterna: !!extAlterna }));
   res.status(200).json({ resultados, traidas: resultados.filter(r => r.ok).length });
 }

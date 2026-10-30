@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-const CFG = { VERSION: '0.20.1', MIGRACION_ESPERADA: 14, URL_TTL: 3600 };
+const CFG = { VERSION: '0.21.0', MIGRACION_ESPERADA: 14, URL_TTL: 3600 };
 const $ = id => document.getElementById(id);
 const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
 const MAX = 32, BUCKET = 'arkaphoto';
@@ -710,18 +710,22 @@ $('btnTraer').addEventListener('click', async ()=>{
   await cargarImagenes();
   const porLote = new Map(); let yaEstaban=0;
   lastMissing.forEach(({key,n})=>{ const L=lotes.get(key); if(!L) return; if(L.items.has(n)){ yaEstaban++; return; } if(!porLote.has(key)) porLote.set(key,{ext:L.ext,seqs:[]}); porLote.get(key).seqs.push(n); });
-  let ok=0, no=0, ex=0, inexistentes=0; const fallas=[], sinRuta=new Map(); // lote -> seqs que el origen ya no tiene (404)
+  let ok=0, no=0, ex=0, inexistentes=0; const fallas=[], sinRuta=new Map(), resondear=new Set(); // sinRuta: lote -> seqs que el origen no tiene con ninguna extensión
   for(const [lote,{ext,seqs}] of porLote){
     $('traerTxt').textContent=`Trayendo ${seqs.length} del lote ${lote}…`;
     const r = await post('/api/traer',{lote,ext,seqs},true);
     if(!r.ok){ fallas.push(`${lote}: ${r.j.error||r.status}`); continue; }
-    r.j.resultados.forEach(x=>{ if(x.ok) ok++; else if(x.status==='existe') ex++; else if(x.status===404){ inexistentes++; if(!sinRuta.has(x.lote)) sinRuta.set(x.lote,[]); sinRuta.get(x.lote).push(x.seq); } else { no++; fallas.push(`${x.nombre}: ${describeFalla(x)}`); } });
+    r.j.resultados.forEach(x=>{ if(x.extAlterna) resondear.add(x.lote); if(x.ok) ok++; else if(x.status==='existe') ex++; else if(x.status===404){ inexistentes++; if(!sinRuta.has(x.lote)) sinRuta.set(x.lote,[]); sinRuta.get(x.lote).push(x.seq); } else { no++; fallas.push(`${x.nombre}: ${describeFalla(x)}`); } });
   }
-  await cargarImagenes(); render();
+  await cargarImagenes();
+  // Alguna foto respondió con la otra extensión (.jpg↔.png): el tamaño del lote pudo quedar corto; se sondea otra vez con ambas
+  let nuevos=0; if(resondear.size){ $('traerTxt').textContent='Volviendo a sondear lotes con extensión mixta…'; await sondear([...resondear],true); nuevos=[...resondear].reduce((a,k)=>a+faltantes(lotes.get(k),k).length,0); }
+  render();
   $('faltantes').hidden=false; $('pregunta').hidden=true;
   const lineas=[`Traídas: ${ok}. Ya estaban en el sistema: ${ex+yaEstaban}. No existen en la ruta: ${inexistentes}. Con error: ${no}.`];
+  if(resondear.size) lineas.push(`${resondear.size} lote${resondear.size===1?'':'s'} con extensión mixta (.jpg y .png): se volvió a sondear su tamaño${nuevos?`; ahora faltan ${nuevos} más, vuelve a pulsar TRAER`:''}.`);
   if(inexistentes){
-    lineas.push('', `⚠ ${inexistentes} foto${inexistentes===1?'':'s'} no existe${inexistentes===1?'':'n'} en la ruta pública: el origen ya no las tiene y no se pueden recuperar desde la web. El lote se queda con lo que se subió; solo crecerá si esas fotos llegan por Carga de fotos (archivo local).`);
+    lineas.push('', `⚠ ${inexistentes} foto${inexistentes===1?'':'s'} no existe${inexistentes===1?'':'n'} en la ruta pública (ni .jpg ni .png): el origen ya no las tiene y no se pueden recuperar desde la web. El lote se queda con lo que se subió; solo crecerá si esas fotos llegan por Carga de fotos (archivo local).`);
     for(const [lote,sq] of sinRuta) lineas.push(`${etiqueta(lote)} (${lote}): faltan ${sq.sort((a,b)=>a-b).join(', ')}`);
   }
   if(fallas.length) lineas.push('', 'Errores (reintentables):', ...fallas);
@@ -834,7 +838,7 @@ async function colaBucle(){
   while(colaCorriendo){
     const r=await post('/api/cola',{ accion:'procesar', n:cfg.tanda },true);
     if(!r.ok){ toast('Cola: '+(r.j.error||r.status)); break; }
-    $('colaTxt').textContent=`Última tanda: ${r.j.procesadas} procesadas · ${r.j.traidas||0} traídas · ${r.j.existe||0} existían · ${r.j.error||0} errores · ${((r.j.ms||0)/1000).toFixed(1)} s · ritmo ${cfg.conc}×, pausa ${cfg.pausa} ms`;
+    $('colaTxt').textContent=`Última tanda: ${r.j.procesadas} procesadas · ${r.j.traidas||0} traídas · ${r.j.existe||0} existían · ${r.j.noexiste||0} no existen · ${r.j.error||0} errores${r.j.extAlterna?` · ${r.j.extAlterna} con otra extensión (${r.j.resondeados} lotes resondeados, +${r.j.encoladas} encoladas)`:''} · ${((r.j.ms||0)/1000).toFixed(1)} s · ritmo ${cfg.conc}×, pausa ${cfg.pausa} ms`;
     if(r.j.frenado){ colaCorriendo=false; $('colaTxt').textContent=`El origen respondió HTTP ${r.j.frenado}: cola en pausa. Baja el ritmo en Admin y espera unos minutos antes de reanudar.`; toast(`Origen frenó (HTTP ${r.j.frenado})`); break; }
     const e=await colaEstado();
     if(r.j.fin || !e || !e.pend) break;

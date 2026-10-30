@@ -1,5 +1,6 @@
 # CAMBIOS · ARKAPHOTO
 
+- v0.21.0 — 2026-10-30 — extensión mixta por lote: ante 404 se prueba .jpg↔.png en TRAER, cola, sondeo, analizar y completar (`api/_origen.js` compartido); si responde, se resondea el tamaño del lote con ambas extensiones y se encola lo nuevo; 404 con ambas = "no existe", sin reintentos
 - v0.20.1 — 2026-10-30 — TRAER: los 404 se reportan aparte como "no existen en la ruta", agrupados por lote, con explicación de que no se recuperan desde la web (solo por carga local)
 - v0.20.0 — 2026-10-30 — Carga de URL: clasificación por fila de lote (Tipo › Subgrupo) en la tabla de análisis; la global sigue como default al encolar
 - v0.19.0 — 2026-10-30 — ritmo de descarga configurable (paralelas, pausa entre fotos con jitter, tamaño de tanda, espera entre tandas; presets Suave/Normal/Rápido; default Suave); User-Agent de navegador; ante 429/403 del origen la cola se detiene y devuelve a pendientes (mig 14)

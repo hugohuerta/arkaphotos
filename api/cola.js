@@ -5,17 +5,13 @@
 import { createClient } from '@supabase/supabase-js';
 import { conVersion } from './_version.js';
 import { dimensiones } from './_dims.js';
+import { ESCALA, pow2, hostPermitido, alterna, conExt, UA, sondearTamano } from './_origen.js';
 
 export const config = { maxDuration: 60 };
 const MAX_BYTES = 50 * 1024 * 1024;
 const CONCURRENCIA = 4;
 const PRESUPUESTO_MS = 45000;
 const MAX_INTENTOS = 3;
-
-function hostPermitido(host) {
-  const hosts = (process.env.ALLOWED_FETCH_HOSTS || '').split(',').map(h => h.trim().toLowerCase()).filter(Boolean);
-  return !hosts.length || hosts.some(h => host === h || host.endsWith('.' + h));
-}
 
 export default async function handler(req, res) {
   conVersion(res);
@@ -48,7 +44,6 @@ export default async function handler(req, res) {
   const n = Math.min(Math.max(Number(req.body?.n) || Number(rc?.cola_tanda) || 12, 1), 48);
   const inicio = Date.now();
   const dormir = ms => new Promise(r => setTimeout(r, ms));
-  const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36';
   // Toma pendientes (y "procesando" huérfanas de más de 5 min) y las marca como procesando
   const { data: lote } = await admin.from('arkaphoto_cola').select('*').eq('user_id', user.id)
     .or(`estado.eq.pendiente,and(estado.eq.procesando,procesado_en.lt.${new Date(Date.now() - 300000).toISOString()})`)
@@ -62,8 +57,23 @@ export default async function handler(req, res) {
   const { data: existentes } = await admin.from('arkaphoto_imagenes').select('lote,seq').eq('user_id', user.id).in('lote', lotesQ);
   const ya = new Set((existentes || []).map(r => `${r.lote}-${r.seq}`));
 
-  const cola = lote.slice(); const res_ = { traidas: 0, existe: 0, error: 0 }; const clasificados = new Set();
+  const cola = lote.slice(); const res_ = { traidas: 0, existe: 0, error: 0, noexiste: 0, extAlterna: 0, resondeados: 0, encoladas: 0 }; const clasificados = new Set(), resondeados = new Set();
   const marcar = (fila, campos) => admin.from('arkaphoto_cola').update({ ...campos, procesado_en: new Date().toISOString() }).eq('id', fila.id);
+  const cab = { 'User-Agent': UA, Accept: 'image/*,*/*;q=0.8' };
+  // Si una foto apareció con la otra extensión, el tamaño sondeado del lote pudo quedar corto: se vuelve a sondear con ambas extensiones y se encola lo nuevo.
+  const resondear = async t => {
+    if (resondeados.has(t.lote)) return; resondeados.add(t.lote);
+    const base = t.url.slice(0, t.url.lastIndexOf('/'));
+    const [{ data: imgs }, { data: enCola }] = await Promise.all([
+      admin.from('arkaphoto_imagenes').select('seq').eq('user_id', user.id).eq('lote', t.lote),
+      admin.from('arkaphoto_cola').select('seq').eq('user_id', user.id).eq('lote', t.lote)]);
+    const conocidas = new Set([...(imgs || []).map(r => r.seq), ...(enCola || []).map(r => r.seq)]);
+    const { tamano } = await sondearTamano(base, t.lote, t.ext, pow2(Math.max(1, ...conocidas)));
+    await admin.from('arkaphoto_lotes').upsert({ user_id: user.id, lote: t.lote, tamano, sondeado_en: new Date().toISOString() }, { onConflict: 'user_id,lote' });
+    const nuevas = []; for (let i = 1; i <= tamano; i++) if (!conocidas.has(i)) nuevas.push({ user_id: user.id, lote: t.lote, seq: i, ext: t.ext, nombre: `${t.lote}-${i}.${t.ext}`, url: `${base}/${t.lote}-${i}.${t.ext}`, origen_archivo: 'resondeo', clasif_id: t.clasif_id || null });
+    if (nuevas.length) { const { data: ins } = await admin.from('arkaphoto_cola').upsert(nuevas, { onConflict: 'user_id,lote,seq', ignoreDuplicates: true }).select('id'); res_.encoladas += ins?.length || 0; }
+    res_.resondeados++;
+  };
   const worker = async () => {
     while (cola.length) {
       if (Date.now() - inicio > PRESUPUESTO_MS) { const resto = cola.splice(0); if (resto.length) await admin.from('arkaphoto_cola').update({ estado: 'pendiente' }).in('id', resto.map(x => x.id)); return; }
@@ -72,7 +82,13 @@ export default async function handler(req, res) {
         if (ya.has(`${t.lote}-${t.seq}`)) { await marcar(t, { estado: 'existe' }); res_.existe++; continue; }
         const u = new URL(t.url);
         if (u.protocol !== 'https:' || !hostPermitido(u.hostname)) throw Object.assign(new Error('host no permitido'), { fatal: true });
-        const r = await fetch(t.url, { redirect: 'follow', headers: { 'User-Agent': UA, Accept: 'image/*,*/*;q=0.8' } });
+        let r = await fetch(t.url, { redirect: 'follow', headers: cab });
+        if (r.status === 404) { // probar la otra extensión antes de darla por inexistente
+          const a = alterna(t.ext), ua = conExt(t.url, a);
+          const ra = await fetch(ua, { redirect: 'follow', headers: cab });
+          if (ra.ok) { r = ra; Object.assign(t, { ext: a, url: ua, nombre: `${t.lote}-${t.seq}.${a}` }); await marcar(t, { ext: a, url: ua, nombre: t.nombre }); res_.extAlterna++; await resondear(t); }
+          else if (ra.status === 404) { await marcar(t, { estado: 'error', http_status: 404, error: 'no existe en la ruta (ni .jpg ni .png): no recuperable desde la web', intentos: MAX_INTENTOS }); res_.noexiste++; continue; }
+        }
         if (r.status === 429 || r.status === 403) { // el origen nos frena: devolver a pendiente y cortar la tanda
           await marcar(t, { estado: 'pendiente', http_status: r.status, error: `HTTP ${r.status} (origen frenó)`, intentos: t.intentos });
           res_.frenado = r.status; const resto = cola.splice(0); if (resto.length) await admin.from('arkaphoto_cola').update({ estado: 'pendiente' }).in('id', resto.map(x => x.id)); return;
@@ -108,13 +124,6 @@ export default async function handler(req, res) {
 
 // ---- Completar lotes: para cada lote presente en la cola, sondea su tamaño en la base de su propia URL
 //      (32 → 16 → 8 → 4 → 2; nunca por debajo del mayor seq conocido) y encola las posiciones que falten.
-const ESCALA = [32, 16, 8, 4, 2];
-const pow2 = n => { let p = 1; while (p < n) p *= 2; return Math.min(32, p); };
-async function existe(url) {
-  try { let r = await fetch(url, { method: 'HEAD', redirect: 'follow' });
-    if (r.status === 405 || r.status === 501) r = await fetch(url, { method: 'GET', headers: { Range: 'bytes=0-0' }, redirect: 'follow' });
-    return r.ok; } catch { return false; }
-}
 async function completar(admin, user, res) {
   const inicio = Date.now();
   const { data: filas } = await admin.from('arkaphoto_cola').select('lote,seq,ext,url,clasif_id').eq('user_id', user.id).order('id').limit(5000);
@@ -133,8 +142,8 @@ async function completar(admin, user, res) {
     const L = porLote.get(k); let host;
     try { const u = new URL(L.base); if (u.protocol !== 'https:') throw 0; host = u.hostname; } catch { continue; }
     if (!hostPermitido(host)) continue;
-    const minimo = pow2(Math.max(1, ...L.seqs)); let tamano = minimo;
-    for (const t of ESCALA) { if (t <= minimo) break; if (await existe(`${L.base}/${k}-${t}.${L.ext}`)) { tamano = t; break; } }
+    const minimo = pow2(Math.max(1, ...L.seqs));
+    const { tamano } = await sondearTamano(L.base, k, L.ext, minimo);
     await admin.from('arkaphoto_lotes').upsert({ user_id: user.id, lote: k, tamano, sondeado_en: new Date().toISOString() }, { onConflict: 'user_id,lote' });
     const nuevas = [];
     for (let i = 1; i <= tamano; i++) if (!L.seqs.has(i)) nuevas.push({ user_id: user.id, lote: k, seq: i, ext: L.ext, nombre: `${k}-${i}.${L.ext}`, url: `${L.base}/${k}-${i}.${L.ext}`, origen_archivo: 'completar', clasif_id: L.clasif_id });
@@ -170,8 +179,7 @@ async function analizar(admin, user, lotesIn, res) {
       const minimo = pow2(Math.max(1, ...conocidas)); const m = metaM.get(L.lote);
       let tamano = m?.sondeado_en && m.tamano >= minimo ? m.tamano : null;
       if (!tamano && Date.now() - inicio < PRESUPUESTO_MS) {
-        tamano = minimo;
-        for (const t of ESCALA) { if (t <= minimo) break; if (await existe(`${L.base}/${L.lote}-${t}.${L.ext}`)) { tamano = t; break; } }
+        ({ tamano } = await sondearTamano(L.base, L.lote, L.ext, minimo));
         await admin.from('arkaphoto_lotes').upsert({ user_id: user.id, lote: L.lote, tamano, sondeado_en: new Date().toISOString() }, { onConflict: 'user_id,lote' });
       }
       if (!tamano) { out.push({ lote: L.lote, pendiente: true }); continue; }
