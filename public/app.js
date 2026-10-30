@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-const CFG = { VERSION: '0.24.0', MIGRACION_ESPERADA: 15, URL_TTL: 3600 };
+const CFG = { VERSION: '0.24.1', MIGRACION_ESPERADA: 15, URL_TTL: 3600 };
 const $ = id => document.getElementById(id);
 const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
 const MAX = 32, BUCKET = 'arkaphoto';
@@ -106,6 +106,7 @@ async function todas(construir, tam=1000){
   const out=[]; for(let desde=0;;desde+=tam){ const { data, error } = await construir().range(desde, desde+tam-1); if(error) throw error; out.push(...(data||[])); if(!data||data.length<tam) break; } return out;
 }
 async function cargarTodo(){
+  $('avisoDatos').hidden=true;
   const { data: c } = await sb.from('arkaphoto_config').select('ruta_publica,tarifa_gb_usd,gb_incluidos,cola_concurrencia,cola_pausa_ms,cola_tanda,cola_espera_s').maybeSingle();
   cfg.base = (c?.ruta_publica||'').replace(/\/+$/,'');
   cfg.tarifa = Number(c?.tarifa_gb_usd ?? 0.021); cfg.gbInc = Number(c?.gb_incluidos ?? 1);
@@ -114,7 +115,7 @@ async function cargarTodo(){
   await Promise.all([cargarClasif(), cargarLotesMeta(), cargarTags(), cargarImagenes()]);
 }
 async function cargarTags(){
-  let t, lt; try{ [t, lt] = await Promise.all([ todas(()=>sb.from('arkaphoto_tags').select('id,nombre').order('nombre')), todas(()=>sb.from('arkaphoto_lote_tags').select('lote,tag_id').order('lote')) ]); }catch(e){ toast('Error leyendo tags'); return; }
+  let t, lt; try{ [t, lt] = await Promise.all([ todas(()=>sb.from('arkaphoto_tags').select('id,nombre').order('nombre')), todas(()=>sb.from('arkaphoto_lote_tags').select('lote,tag_id').order('lote')) ]); }catch(e){ avisoDatos('tags',e); return; }
   tags.clear(); t.forEach(x=>tags.set(x.id,x));
   loteTags.clear(); lt.forEach(x=>{ if(!loteTags.has(x.lote)) loteTags.set(x.lote,new Set()); loteTags.get(x.lote).add(x.tag_id); });
 }
@@ -128,13 +129,13 @@ async function tagPorNombre(nombre){
 }
 async function cargarClasif(){
   const { data, error } = await sb.from('arkaphoto_clasif').select('id,parent_id,nivel,nombre,orden').order('nivel').order('orden').order('nombre');
-  if(error){ toast('Error leyendo clasificación: '+error.message); return; }
+  if(error){ avisoDatos('clasificación',error); return; }
   clasif.clear(); (data||[]).forEach(c=>clasif.set(c.id,c));
   cascCarga.pinta(); cascMasivo.pinta(); cascUrls.pinta();
   const sel=$('fTipo'); sel.innerHTML='<option value="">Todos los tipos</option>'+hijos(null).map(t=>`<option value="${t.id}">${esc(t.nombre)}</option>`).join(''); sel.value=fil.tipo;
 }
 async function cargarLotesMeta(){
-  let data; try{ data = await todas(()=>sb.from('arkaphoto_lotes').select('lote,nombre,clasif_id,notas,portada_seq,tamano,sondeado_en,validado_en').order('lote')); }catch(e){ toast('Error leyendo lotes: '+e.message); return; }
+  let data; try{ data = await todas(()=>sb.from('arkaphoto_lotes').select('lote,nombre,clasif_id,notas,portada_seq,tamano,sondeado_en,validado_en').order('lote')); }catch(e){ avisoDatos('lotes',e); return; }
   lotesMeta.clear(); data.forEach(m=>lotesMeta.set(m.lote,m));
 }
 const hijos = pid => [...clasif.values()].filter(c=>(c.parent_id??null)===(pid??null)).sort((a,b)=>a.orden-b.orden||a.nombre.localeCompare(b.nombre));
@@ -183,7 +184,7 @@ async function firmar(rutas){
 const urlCache = new Map(); // ruta -> {url, exp}
 async function cargarImagenes(){
   let data; try{ data = await todas(()=>sb.from('arkaphoto_imagenes').select('id,lote,seq,ext,ruta,bytes,origen,favorita,oculta,ancho,alto,creado_en').order('lote').order('seq')); }
-  catch(e){ toast('Error leyendo imágenes: '+e.message); return; }
+  catch(e){ avisoDatos('imágenes',e); return; }
   lotes.clear();
   for(const r of data){
     const [ts,hash] = r.lote.split('-');
@@ -217,6 +218,12 @@ $('fCfg').addEventListener('submit', async e=>{
   toast(error ? 'No se guardó: '+error.message : 'Configuración guardada');
 });
 
+// Un fallo al leer una tabla no debe pasar desapercibido (p. ej. migración pendiente): aviso fijo arriba, no solo toast
+function avisoDatos(que, e){
+  const msg=e?.message||String(e); const a=$('avisoDatos'); a.hidden=false;
+  a.textContent=`No se pudieron leer ${que}: ${msg}. Los datos mostrados están incompletos. Revisa Admin → Sistema (¿migración pendiente?) y recarga.`;
+  toast(`Error leyendo ${que}`);
+}
 // ---------- ritmo de descarga
 const PRESETS = { suave:{conc:1,pausa:1500,tanda:12,espera:10}, normal:{conc:2,pausa:500,tanda:24,espera:3}, rapido:{conc:4,pausa:0,tanda:48,espera:0} };
 function pintaRitmo(){
