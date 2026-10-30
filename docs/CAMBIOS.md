@@ -1,5 +1,6 @@
 # CAMBIOS · ARKAPHOTO
 
+- v0.13.1 — 2026-10-30 — fix: "Sesión inválida" en traer/sondear/cola tras 1 h (token caducado); ahora cada llamada usa el token renovado
 - v0.13.0 — 2026-10-30 — Carga de URL: archivo .txt/.json (extrae y desenvuelve URLs de proxies de redimensión), análisis masivo con conteos (nuevas / existen / en cola / repetidas / no reconocidas), cola persistente (mig 12) procesada por tandas con /api/cola, pausa/reanuda, reintentos y limpieza
 - v0.12.0 — 2026-10-30 — filtro por formato en Galerías (1:1, 16:9, 9:16, 4:3, 3:4, otro); ancho/alto por foto (mig 11): se miden al subir, en traer (cabecera PNG/JPEG en servidor) y las existentes al abrir Galerías
 - v0.11.1 — 2026-10-30 — barra de progreso 0–100 % en el conteo de cada lote (Carga y Galerías)

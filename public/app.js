@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-const CFG = { VERSION: '0.13.0', MIGRACION_ESPERADA: 12, URL_TTL: 3600 };
+const CFG = { VERSION: '0.13.1', MIGRACION_ESPERADA: 12, URL_TTL: 3600 };
 const $ = id => document.getElementById(id);
 const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
 const MAX = 32, BUCKET = 'arkaphoto';
@@ -53,11 +53,13 @@ async function route(){
   if(v==='urls') colaEstado();
 }
 window.addEventListener('hashchange', route);
-sb.auth.onAuthStateChange((ev)=>{ if(ev==='SIGNED_OUT') show('vLogin'); });
+sb.auth.onAuthStateChange((ev, ses)=>{ if(ses) session=ses; if(ev==='SIGNED_OUT') show('vLogin'); });
 
 // ---------- login: código de 8 dígitos por Resend (/api/auth/*), sesión Supabase vía token_hash
 let emailPend = '', cooldownT = null;
-const post = (url, body, auth=false) => fetch(url,{ method:'POST', headers:{'Content-Type':'application/json', ...(auth?{Authorization:`Bearer ${session.access_token}`}:{})}, body:JSON.stringify(body) }).then(async r=>({ ok:r.ok, status:r.status, j: await r.json().catch(()=>({})) }));
+// Token fresco en cada llamada: supabase-js lo renueva cada hora y el guardado al entrar caduca
+async function tokenActual(){ const { data } = await sb.auth.getSession(); if(data.session) session=data.session; return data.session?.access_token||''; }
+const post = async (url, body, auth=false) => fetch(url,{ method:'POST', headers:{'Content-Type':'application/json', ...(auth?{Authorization:`Bearer ${await tokenActual()}`}:{})}, body:JSON.stringify(body) }).then(async r=>({ ok:r.ok, status:r.status, j: await r.json().catch(()=>({})) }));
 
 async function enviarCodigo(){
   const r = await post('/api/auth/send', { email: emailPend });
