@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-const CFG = { VERSION: '0.10.1', MIGRACION_ESPERADA: 9, URL_TTL: 3600 };
+const CFG = { VERSION: '0.10.2', MIGRACION_ESPERADA: 9, URL_TTL: 3600 };
 const $ = id => document.getElementById(id);
 const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
 const MAX = 32, BUCKET = 'arkaphoto';
@@ -537,7 +537,9 @@ function render(){
   $('cClasif').hidden = hist || keys.length===0;
   $('cSelN').textContent=`${[...selCarga].filter(k=>lotes.has(k)).length} de ${keys.length} seleccionados`;
   $('sFalt').textContent=total;
-  $('pregunta').hidden = hist || total===0; $('faltantes').hidden = true;
+  $('pregunta').hidden = true; $('faltantes').hidden = true;
+  $('faltanBanner').hidden = hist || total===0;
+  if(!hist && total) $('faltanTxt').textContent = `Faltan ${total} foto${total===1?'':'s'} en ${keys.filter(k=>faltantes(lotes.get(k)).length).length} lote(s) de esta carga`;
   if(total) $('preguntaTxt').textContent = `Hay ${total} imágenes faltantes en ${keys.filter(k=>faltantes(lotes.get(k)).length).length} lote(s). ¿Quieres que validemos si existen en la ruta pública?`;
   $('noRec').hidden = bad.length===0; $('badList').textContent = bad.join('\n');
   $('dupSec').hidden = dupes.length===0;
@@ -546,7 +548,19 @@ function render(){
 }
 $('histLotes').addEventListener('change', e=>{ const c=e.target.closest('input.selh'); if(!c) return; c.checked?selHist.add(c.dataset.lote):selHist.delete(c.dataset.lote); $('selN').textContent=`${selHist.size} seleccionados`; });
 $('lotes').addEventListener('change', e=>{ const c=e.target.closest('input.selh'); if(!c) return; c.checked?selCarga.add(c.dataset.lote):selCarga.delete(c.dataset.lote); $('cSelN').textContent=`${selCarga.size} de ${sesionLotes.size} seleccionados`; });
-$('btnCargaOk').addEventListener('click', async ()=>{ const cid=cascCarga.valor(); if(!cid){ toast('Elige al menos el Tipo'); return; } const keys=[...selCarga].filter(k=>lotes.has(k)); if(!keys.length){ toast('Marca al menos un lote'); return; } const n=await clasificarLotes(keys, cid); toast(`${n} lote(s) clasificados`); render(); });
+$('btnCargaOk').addEventListener('click', async ()=>{
+  const cid=cascCarga.valor(); if(!cid){ toast('Elige al menos el Tipo'); return; }
+  const keys=[...selCarga].filter(k=>lotes.has(k)); if(!keys.length){ toast('Marca al menos un lote'); return; }
+  const n=await clasificarLotes(keys, cid); const fotos=keys.reduce((a,k)=>a+lotes.get(k).items.size,0);
+  render(); $('cListo').hidden=false; $('cListoTxt').textContent=`${fotos} fotos en ${n} lote(s) → ${rutaClasif(cid).map(c=>c.nombre).join(' › ')}`;
+  $('cListo').scrollIntoView({behavior:'smooth',block:'center'});
+});
+$('btnSeguir').addEventListener('click',()=>{ $('cListo').hidden=true; });
+$('btnNuevaCarga').addEventListener('click', async ()=>{
+  sesionLotes.clear(); selCarga.clear(); bad.length=0; dupes=[]; lastMissing=[]; cascCarga.reset();
+  $('cListo').hidden=true; $('upStatus').textContent='Listo para una nueva carga.';
+  await cargarTodo(); render(); window.scrollTo({top:0,behavior:'smooth'});
+});
 $('btnSelTodos').addEventListener('click', ()=>{ const todos=[...lotes.keys()]; const quitar=todos.every(k=>selHist.has(k)); todos.forEach(k=>quitar?selHist.delete(k):selHist.add(k)); render(); });
 $('btnMasivo').addEventListener('click', ()=>{ if(!selHist.size){ toast('Selecciona al menos un lote'); return; } $('masivo').hidden=false; });
 $('btnMasivoNo').addEventListener('click', ()=>{ $('masivo').hidden=true; });
@@ -557,6 +571,7 @@ $('btnValidarSel').addEventListener('click', ()=>{
   if(!lastMissing.length){ toast('Sin faltantes en '+(selHist.size?'los seleccionados':'ningún lote')); $('faltantes').hidden=true; return; }
   $('btnSi').click();
 });
+$('btnFaltanVer').addEventListener('click',()=>$('btnSi').click());
 $('btnSi').addEventListener('click',()=>{
   if(!cfg.base){ toast('Configura la ruta pública en Admin'); }
   const ul=$('missList'); ul.replaceChildren();

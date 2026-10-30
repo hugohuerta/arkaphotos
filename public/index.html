@@ -1,4 +1,4 @@
-<!-- ARKAPHOTO v0.10.1 -->
+<!-- ARKAPHOTO v0.10.2 -->
 <!doctype html>
 <html lang="es">
 <head>
@@ -329,6 +329,10 @@ section.panel.col .cover{display:block}
         Formato: <span class="key">1790023723-97bc931c14c0c7ef41258f2206c04e91-16.jpg</span> (secuencia 1 a 32; acepta copias "(1)")
       </label>
       <p class="note" id="upStatus" style="margin-top:8px"></p>
+      <section class="panel ask" id="faltanBanner" hidden style="margin-top:18px">
+        <p><b id="faltanTxt" style="font-size:1.05rem"></b></p>
+        <button class="primary" id="btnFaltanVer">Ver faltantes y traer</button>
+      </section>
       <section class="panel" id="resumen" hidden style="margin-top:18px">
         <div class="stats">
           <div><b id="sArch">0</b><span>imágenes</span></div>
@@ -348,6 +352,7 @@ section.panel.col .cover{display:block}
           <label class="f">Detalle<select id="cDet"><option value="">—</option></select></label>
           <div class="full"><button class="primary" id="btnCargaOk">Aplicar a los seleccionados</button></div>
         </div>
+        <div class="ask" id="cListo" hidden style="margin-top:12px"><p><b>FOTOS CLASIFICADAS</b> · <span id="cListoTxt"></span></p><button class="primary" id="btnNuevaCarga">Nueva carga</button><button id="btnSeguir">Seguir aquí</button></div>
       </section>
     </div>
 
