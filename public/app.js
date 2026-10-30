@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-const CFG = { VERSION: '0.8.0', MIGRACION_ESPERADA: 9, URL_TTL: 3600 };
+const CFG = { VERSION: '0.8.1', MIGRACION_ESPERADA: 9, URL_TTL: 3600 };
 const $ = id => document.getElementById(id);
 const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
 const MAX = 32, BUCKET = 'arkaphoto';
@@ -244,6 +244,7 @@ function renderGalerias(){
         cards.push(`<figure class="gc ${it.oculta?'oc':''} ${pseq===i?'portada':''}" data-id="${it.id}" data-seq="${i}"><img loading="lazy" src="${esc(it.url)}" alt="${esc(nombre(L,i))}" data-seq="${i}">
           <span class="n">${i}</span>
           <div class="ov"><button class="fav ${it.favorita?'on':''}" title="Favorita" data-id="${it.id}">${it.favorita?'★':'☆'}</button><button class="hid ${it.oculta?'on':''}" title="${it.oculta?'Mostrar':'Esconder'}" data-id="${it.id}">✕</button></div>
+          ${galVista==='lista'?`<div class="fila"><span class="key">${esc(nombre(L,i))}</span><span>${fmt(it.bytes)}</span><span class="pill ${it.origen==='traida'?'ok':'warn'}">${it.origen}</span>${it.favorita?'<span class="pill ok">★</span>':''}${it.oculta?'<span class="pill miss">oculta</span>':''}</div>`:''}
           ${ed?`<figcaption><b>${i}</b><span class="pill ${it.origen==='traida'?'ok':'warn'}">${it.origen}</span>${pseq===i?'<span class="pill ok">portada</span>':`<button class="quiet mkp" data-seq="${i}" style="padding:2px 6px;font-size:.72rem">portada</button>`}<a href="${esc(it.url)}" target="_blank" rel="noopener">abrir</a></figcaption>`:''}</figure>`);
       } else if(galFiltro!=='fav' && galFiltro!=='ocultas') cards.push(`<figure class="gc"><div class="cell miss" style="aspect-ratio:1;border:0;border-radius:0">${i}</div>${ed?`<figcaption><b>${i}</b><span class="pill miss">falta</span></figcaption>`:''}</figure>`);
     }
@@ -256,7 +257,7 @@ function renderGalerias(){
         <div class="der"><span class="cnt ${r.faltan?'miss':''}">${r.n} de ${r.hasta}</span>${r.ocultas?`<span class="pill warn" title="ocultas">✕ ${r.ocultas}</span>`:''}<button class="tgl pase" data-lote="${esc(key)}" title="Pase de diapositivas">▶ Pase</button><button class="tgl zip" data-lote="${esc(key)}" title="Descargar ZIP">↓ ZIP</button><button class="tgl colap" data-lote="${esc(key)}">${colapsados.has(key)?'Expandir':'Colapsar'}</button><span class="qtag"><button class="qadd" data-lote="${esc(key)}">+ Tag</button></span><button class="ed" data-lote="${esc(key)}">Editar</button></div>
       </div>
       ${pseq?`<div class="cover"><img src="${esc(L.items.get(pseq).url)}" alt="portada" data-seq="${pseq}"><span class="n">portada · ${pseq}</span></div>`:'<div class="cover note">Sin fotos visibles</div>'}
-      <div class="gal ${galVista==='2x'?'x2':''}">${cards.join('')}</div></section>`);
+      <div class="gal ${galVista==='2x'?'x2':galVista==='lista'?'lista':''}">${cards.join('')}</div></section>`);
   }
   $('galBody').innerHTML = parts.join('') || '<p class="note">Nada que mostrar con este filtro.</p>';
   document.querySelectorAll('#galVista button').forEach(b=>b.classList.toggle('on',b.dataset.v===galVista));
@@ -362,6 +363,10 @@ function cerrarPase(){ $('lb').hidden=true; document.body.style.overflow=''; }
 $('lbPrev').addEventListener('click',()=>{ pase.i=(pase.i-1+pase.lista.length)%pase.lista.length; pintaPase(); });
 $('lbNext').addEventListener('click',()=>{ pase.i=(pase.i+1)%pase.lista.length; pintaPase(); });
 $('lbCerrar').addEventListener('click',cerrarPase);
+$('lbAbrir').addEventListener('click',()=>{ const x=pase.lista[pase.i]; if(x) window.open(x.url,'_blank','noopener'); });
+$('lbGuardar').addEventListener('click', async ()=>{ const x=pase.lista[pase.i]; if(!x) return;
+  try{ const r=await fetch(x.url); if(!r.ok) throw 0; const b=await r.blob(); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=x.nombre; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),30000); }
+  catch{ toast('No se pudo descargar; usa Abrir y guarda desde la pestaña'); } });
 document.addEventListener('keydown',e=>{ if($('lb').hidden) return; if(e.key==='ArrowLeft') $('lbPrev').click(); else if(e.key==='ArrowRight') $('lbNext').click(); else if(e.key==='Escape') cerrarPase(); });
 
 // ---------- DESCARGA ZIP (en el navegador; excluye ocultas)

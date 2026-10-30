@@ -1,4 +1,4 @@
-<!-- ARKAPHOTO v0.8.0 -->
+<!-- ARKAPHOTO v0.8.1 -->
 <!doctype html>
 <html lang="es">
 <head>
@@ -121,7 +121,6 @@ table.t td.k{font-family:var(--mono);font-size:.78rem;word-break:break-all}
 .fav{background:none;border:0;cursor:pointer;font-size:1.05rem;line-height:1;color:var(--muted);padding:0 2px}
 .fav.on{color:#e0a500}
 .gc{position:relative}
-.gc .fav{position:absolute;top:6px;right:6px;background:var(--panel);border-radius:999px;padding:3px 6px;border:1px solid var(--line)}
 textarea{font:inherit;font-family:var(--mono);font-size:.82rem;width:100%;min-height:160px;padding:10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);resize:vertical}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .sys{display:grid;gap:8px}
@@ -173,8 +172,8 @@ textarea{font:inherit;font-family:var(--mono);font-size:.82rem;width:100%;min-he
 .qtag input{font:inherit;font-size:.85rem;padding:6px 10px;border:1px solid var(--accent);border-radius:6px;background:var(--bg);color:var(--fg);width:200px}
 /* vistas de galería */
 .gal.x2{grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
-.gc .ov{position:absolute;top:6px;right:6px;display:flex;gap:4px}
-.gc .ov button{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:3px 7px;cursor:pointer;color:var(--muted);font-size:1rem;line-height:1}
+.gc .ov{position:absolute;top:6px;left:6px;right:6px;display:flex;justify-content:space-between;pointer-events:none}
+.gc .ov button{pointer-events:auto;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 10px;cursor:pointer;color:var(--muted);font-size:1.05rem;line-height:1;min-width:34px}
 .gc .ov button.on{color:#e0a500}
 .gc .ov button.hid.on{color:var(--miss)}
 .gc.oc img{opacity:.35;filter:grayscale(1)}
@@ -187,12 +186,26 @@ section.panel.col .cover{display:block}
 .cover img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;cursor:pointer}
 .cover .n{position:absolute;left:8px;bottom:8px;font-size:.78rem;background:var(--panel);padding:2px 8px;border-radius:4px}
 .tgl{font-size:.85rem;padding:4px 10px}
+.gal.lista{display:grid;grid-template-columns:1fr;gap:6px}
+.gal.lista .gc{display:grid;grid-template-columns:96px 1fr;align-items:center;gap:12px;padding-right:10px}
+.gal.lista .gc img{width:96px;height:96px;aspect-ratio:1}
+.gal.lista .gc .ov{position:static;justify-content:flex-start;gap:6px;grid-column:2;pointer-events:auto}
+.gal.lista .gc .n{position:static;grid-column:2}
+.gal.lista .gc figcaption{grid-column:2;padding:0}
+.gal.lista .gc .fila{grid-column:2;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;font-size:.82rem;color:var(--muted)}
+.gal.lista .gc .cell{width:96px;height:96px}
+/* cajas de filtros */
+.box{border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:grid;gap:8px;background:var(--panel)}
+.box h3{margin:0;font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:600}
+.boxes{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:12px}
+@media (max-width:760px){.boxes{grid-template-columns:1fr}}
 /* pase (lightbox) */
 .lb{position:fixed;inset:0;background:rgba(10,10,12,.96);z-index:20;display:grid;grid-template-rows:auto 1fr auto;color:#ebe8e0}
 .lb header{display:flex;justify-content:space-between;align-items:center;padding:12px max(16px,env(safe-area-inset-left,0px));font-size:.9rem}
 .lb header b{font-family:var(--mono);font-weight:500}
-.lb .stage{position:relative;display:grid;place-items:center;min-height:0}
-.lb .stage img{max-width:100%;max-height:100%;object-fit:contain}
+.lb .stage{position:relative;min-height:0;height:100%;overflow:hidden}
+.lb .stage img{width:100%;height:100%;object-fit:contain;display:block}
+.lb header .acts{display:flex;gap:8px;flex-wrap:wrap}
 .lb .arrow{position:absolute;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.1);border:0;color:#fff;font-size:2rem;width:56px;height:80px;border-radius:8px;cursor:pointer}
 .lb .arrow.l{left:12px}.lb .arrow.r{right:12px}
 .lb footer{display:flex;justify-content:center;gap:10px;padding:12px;font-size:.85rem}
@@ -271,19 +284,26 @@ section.panel.col .cover{display:block}
   <!-- GALERÍAS -->
   <section id="v-galerias" data-view hidden>
     <div class="filtros">
-      <div class="fila">
-        <label class="f">Tipo<select id="fTipo"><option value="">Todos los tipos</option></select></label>
-        <label class="f" id="fSubL" hidden>Subgrupo<select id="fSub"><option value="">Todos</option></select></label>
-        <label class="f" id="fDetL" hidden>Detalle<select id="fDet"><option value="">Todos</option></select></label>
-        <label class="f" style="flex:1 1 220px">Buscar<input type="search" id="fBuscar" placeholder="nombre, clave, clasificación, tag, notas"></label>
+      <div class="boxes">
+        <div class="box">
+          <h3>Filtro</h3>
+          <div class="fila">
+            <label class="f">Tipo<select id="fTipo"><option value="">Todos los tipos</option></select></label>
+            <label class="f" id="fSubL" hidden>Subgrupo<select id="fSub"><option value="">Todos</option></select></label>
+            <label class="f" id="fDetL" hidden>Detalle<select id="fDet"><option value="">Todos</option></select></label>
+            <label class="f" style="flex:1 1 200px">Buscar<input type="search" id="fBuscar" placeholder="nombre, clave, clasificación, tag, notas"></label>
+          </div>
+          <div class="seg" id="galFiltro"><button class="on" data-f="todos">Todos</button><button data-f="fav">Favoritas</button><button data-f="incompletos">Incompletos</button><button data-f="sinclasif">Sin clasificar</button><button data-f="ocultas">Ocultas</button></div>
+        </div>
+        <div class="box">
+          <h3>Vista</h3>
+          <div class="seg" id="galVista"><button class="on" data-v="1x">Cuadrícula</button><button data-v="2x">2X</button><button data-v="lista">Lista</button></div>
+          <div class="fila"><button class="tgl" id="btnColapsar">Colapsar todo</button><button class="tgl" id="btnZipTodo">↓ Descargar visibles</button></div>
+        </div>
       </div>
-      <div class="fila">
-        <div class="seg" id="galFiltro"><button class="on" data-f="todos">Todos</button><button data-f="fav">Favoritas</button><button data-f="incompletos">Incompletos</button><button data-f="sinclasif">Sin clasificar</button><button data-f="ocultas">Ocultas</button></div>
-        <div class="seg" id="galVista"><button class="on" data-v="1x">Cuadrícula</button><button data-v="2x">2X</button></div>
-        <button class="tgl" id="btnColapsar">Colapsar todo</button>
-        <button class="tgl" id="btnZipTodo">↓ Descargar visibles</button>
-        <div class="tags" id="fTags"></div>
-        <span class="note" id="galStats" style="margin-left:auto"></span>
+      <div class="box">
+        <h3>Tags</h3>
+        <div class="fila"><div class="tags" id="fTags"></div><span class="note" id="galStats" style="margin-left:auto"></span></div>
       </div>
     </div>
     <div id="galBody"></div>
@@ -407,7 +427,7 @@ section.panel.col .cover{display:block}
 </div>
 
 <div class="lb" id="lb" hidden>
-  <header><span id="lbTitulo"></span><b id="lbPos"></b><button class="x" id="lbCerrar">Cerrar ✕</button></header>
+  <header><span id="lbTitulo"></span><b id="lbPos"></b><span class="acts"><button class="x" id="lbGuardar">↓ Guardar foto</button><button class="x" id="lbAbrir">Abrir ↗</button><button class="x" id="lbCerrar">Cerrar ✕</button></span></header>
   <div class="stage"><button class="arrow l" id="lbPrev">‹</button><img id="lbImg" alt=""><button class="arrow r" id="lbNext">›</button></div>
   <footer><span id="lbNombre" class="key"></span></footer>
 </div>
