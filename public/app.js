@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-const CFG = { VERSION: '0.16.1', MIGRACION_ESPERADA: 13, URL_TTL: 3600 };
+const CFG = { VERSION: '0.16.2', MIGRACION_ESPERADA: 13, URL_TTL: 3600 };
 const $ = id => document.getElementById(id);
 const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
 const MAX = 32, BUCKET = 'arkaphoto';
@@ -611,6 +611,7 @@ $('btnMasivoNo').addEventListener('click', ()=>{ $('masivo').hidden=true; });
 $('btnMasivoOk').addEventListener('click', async ()=>{ const cid=cascMasivo.valor(); if(!cid){ toast('Elige al menos el Tipo'); return; } const n=await clasificarLotes([...selHist].filter(k=>lotes.has(k)), cid); toast(`${n} lote(s) clasificados`); $('masivo').hidden=true; selHist.clear(); render(); });
 $('btnSondearSel').addEventListener('click', async ()=>{ const keys=(selHist.size?[...selHist]:[...lotes.keys()]).filter(k=>lotes.has(k)); toast('Sondeando…'); const n=await sondear(keys,true); toast(`${n} lote(s) sondeados`); render(); });
 $('btnValidarSel').addEventListener('click', async ()=>{
+  await cargarImagenes(); await cargarLotesMeta();
   const keys=(selHist.size?[...selHist]:[...lotes.keys()]).filter(k=>lotes.has(k));
   await sondear(keys); render();
   lastMissing=[]; keys.forEach(key=>{ const L=lotes.get(key); faltantes(L,key).forEach(n=>lastMissing.push({key,L,n})); });
@@ -631,18 +632,20 @@ $('btnCopiar').addEventListener('click',()=>{ navigator.clipboard?.writeText(las
 $('btnTraer').addEventListener('click', async ()=>{
   if(!cfg.base){ toast('Configura la ruta pública en Admin'); return; }
   $('btnTraer').disabled=true;
-  const porLote = new Map();
-  lastMissing.forEach(({key,L,n})=>{ if(!porLote.has(key)) porLote.set(key,{ext:L.ext,seqs:[]}); porLote.get(key).seqs.push(n); });
-  let ok=0, no=0; const fallas=[];
+  // Estado fresco: lo que haya entrado por la cola u otra pestaña ya no se pide
+  await cargarImagenes();
+  const porLote = new Map(); let yaEstaban=0;
+  lastMissing.forEach(({key,n})=>{ const L=lotes.get(key); if(!L) return; if(L.items.has(n)){ yaEstaban++; return; } if(!porLote.has(key)) porLote.set(key,{ext:L.ext,seqs:[]}); porLote.get(key).seqs.push(n); });
+  let ok=0, no=0, ex=0; const fallas=[];
   for(const [lote,{ext,seqs}] of porLote){
     $('traerTxt').textContent=`Trayendo ${seqs.length} del lote ${lote}…`;
     const r = await post('/api/traer',{lote,ext,seqs},true);
     if(!r.ok){ fallas.push(`${lote}: ${r.j.error||r.status}`); continue; }
-    r.j.resultados.forEach(x=>{ if(x.ok) ok++; else { no++; fallas.push(`${x.nombre}: ${describeFalla(x)}`); } });
+    r.j.resultados.forEach(x=>{ if(x.ok) ok++; else if(x.status==='existe') ex++; else { no++; fallas.push(`${x.nombre}: ${describeFalla(x)}`); } });
   }
   await cargarImagenes(); render();
   $('faltantes').hidden=false; $('pregunta').hidden=true;
-  $('traerTxt').textContent = `Traídas: ${ok}. No encontradas o con error: ${no}.` + (fallas.length?`\n${fallas.join('\n')}`:'');
+  $('traerTxt').textContent = `Traídas: ${ok}. Ya estaban en el sistema: ${ex+yaEstaban}. No encontradas o con error: ${no}.` + (fallas.length?`\n${fallas.join('\n')}`:'');
   $('btnTraer').disabled=false;
 });
 const describeFalla = x => x.status==='existe'?'ya existe en el sistema':x.status==='omitida'?`omitida (${x.error})`:x.status===404?'no existe en la ruta':`HTTP ${x.status}${x.error?' '+x.error:''}`;
