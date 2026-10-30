@@ -1,4 +1,4 @@
-<!-- ARKAPHOTO v0.17.0 -->
+<!-- ARKAPHOTO v0.18.0 -->
 <!doctype html>
 <html lang="es">
 <head>
@@ -217,6 +217,10 @@ section.panel.col .cover{display:block}
 .lb .arrow.l{left:12px}.lb .arrow.r{right:12px}
 .lb footer{display:flex;justify-content:center;gap:10px;padding:12px;font-size:.85rem}
 .lb button.x{background:none;border:1px solid #444;color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer}
+/* análisis por tipo */
+tr.tipo td{font-weight:600;background:var(--bg)}
+tr.sub td:first-child{color:transparent}
+.mini{display:inline-block;height:8px;border-radius:4px;background:var(--accent);vertical-align:middle;margin-right:6px}
 /* barra de progreso del lote */
 .prog{position:relative;display:inline-flex;align-items:center;min-width:170px;height:26px;border-radius:999px;background:var(--miss-bg);border:1px solid var(--line);overflow:hidden;font-variant-numeric:tabular-nums;font-weight:600;font-size:.85rem;vertical-align:middle}
 .prog i{position:absolute;inset:0;width:0;background:var(--ok-bg);transition:width .3s}
@@ -287,6 +291,10 @@ section.panel.col .cover{display:block}
       <div class="tile"><b id="dEspacio">0</b><span>espacio ocupado</span><small id="dEspacioSub"></small></div>
       <div class="tile"><b id="dCosto">—</b><span>costo aprox. / mes</span><small id="dCostoSub"></small></div>
       <div class="tile"><b id="dFav">0</b><span>favoritas</span><small id="dFavSub"></small></div>
+    </div>
+    <div class="panel" style="margin-bottom:18px">
+      <div class="row" style="justify-content:space-between;margin-bottom:10px"><h2 style="margin:0">Por tipo y subgrupo</h2><span class="note" id="dClasN"></span></div>
+      <div class="tw"><table class="t"><thead><tr><th>Tipo</th><th>Subgrupo</th><th>Lotes</th><th>Fotos</th><th>%</th><th>Espacio</th><th>Favoritas</th><th></th></tr></thead><tbody id="dClas"></tbody></table></div>
     </div>
     <div class="panel">
       <div class="row" style="justify-content:space-between;margin-bottom:10px"><h2 style="margin:0">Últimos lotes</h2><span class="note" id="dLotesN"></span></div>

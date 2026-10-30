@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-const CFG = { VERSION: '0.17.0', MIGRACION_ESPERADA: 13, URL_TTL: 3600 };
+const CFG = { VERSION: '0.18.0', MIGRACION_ESPERADA: 13, URL_TTL: 3600 };
 const $ = id => document.getElementById(id);
 const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
 const MAX = 32, BUCKET = 'arkaphoto';
@@ -276,10 +276,34 @@ function renderInicio(){
   $('dCosto').textContent = cfg.tarifa ? `US$${costo.toFixed(costo<1?3:2)}` : '—';
   $('dCostoSub').textContent = cfg.tarifa ? `${cobrable.toFixed(3)} GB sobre ${cfg.gbInc} GB incluidos × US$${cfg.tarifa}/GB` : 'configura la tarifa en Admin';
   $('dFav').textContent=fav; $('dFavSub').textContent=`${completos} de ${lotes.size} lotes completos`;
+  // Análisis por tipo y subgrupo (fotos, espacio, favoritas, lotes); sin clasificar al final
+  const agg=new Map(); const nodo=(k,nombre,tipoId,subId)=>{ if(!agg.has(k)) agg.set(k,{nombre,tipoId,subId,lotes:0,fotos:0,bytes:0,fav:0}); return agg.get(k); };
+  for(const [key,L] of lotes){
+    const r=resumenLote(L,key); const ruta=rutaClasif((lotesMeta.get(key)||{}).clasif_id);
+    const tipoId=ruta[0]?.id??0, subId=ruta[1]?.id??0;
+    const t=nodo(`t${tipoId}`, ruta[0]?.nombre||'Sin clasificar', tipoId, null); t.lotes++; t.fotos+=r.n; t.bytes+=r.bytes; t.fav+=r.fav;
+    const sNombre = ruta[1]?.nombre || (tipoId?'(sin subgrupo)':'');
+    if(sNombre){ const sN=nodo(`t${tipoId}s${subId}`, sNombre, tipoId, subId); sN.lotes++; sN.fotos+=r.n; sN.bytes+=r.bytes; sN.fav+=r.fav; }
+  }
+  const tipos=[...agg.values()].filter(x=>x.subId===null).sort((a,b)=>(a.tipoId===0)-(b.tipoId===0)||b.fotos-a.fotos);
+  const maxFotos=Math.max(1,...tipos.map(t=>t.fotos)); const html=[];
+  for(const t of tipos){
+    const pct=fotos?Math.round(100*t.fotos/fotos):0;
+    html.push(`<tr class="tipo"><td>${esc(t.nombre)}</td><td></td><td>${t.lotes}</td><td><span class="mini" style="width:${Math.round(80*t.fotos/maxFotos)}px"></span>${t.fotos}</td><td>${pct}%</td><td>${fmt(t.bytes)}</td><td>${t.fav||''}</td><td>${t.tipoId?`<a href="#galerias" data-tipo="${t.tipoId}" class="verGal">ver</a>`:'<a href="#galerias" data-filtro="sinclasif" class="verGal">ver</a>'}</td></tr>`);
+    const subs=[...agg.values()].filter(x=>x.tipoId===t.tipoId && x.subId!==null).sort((a,b)=>b.fotos-a.fotos);
+    for(const sN of subs){ const sp=t.fotos?Math.round(100*sN.fotos/t.fotos):0;
+      html.push(`<tr class="sub"><td>·</td><td>${esc(sN.nombre)}</td><td>${sN.lotes}</td><td>${sN.fotos}</td><td>${sp}% del tipo</td><td>${fmt(sN.bytes)}</td><td>${sN.fav||''}</td><td>${sN.subId?`<a href="#galerias" data-tipo="${t.tipoId}" data-sub="${sN.subId}" class="verGal">ver</a>`:''}</td></tr>`); }
+  }
+  $('dClas').innerHTML = html.join('') || '<tr><td colspan="8" class="note">Sin lotes.</td></tr>';
+  $('dClasN').textContent = `${fotos} fotos · ${fmt(bytes)} · ${tipos.filter(t=>t.tipoId).length} tipos`;
+
   $('dLotes').innerHTML = rows.join('') || `<tr><td colspan="8" class="note">${lotes.size?'Ningún lote cumple el filtro.':'Aún no hay lotes. Sube fotos en "Carga fotos".'}</td></tr>`;
   $('dLotesN').textContent = `${mostrados} de ${lotes.size}${mostrados>100?' · se muestran los 100 más recientes':''}`;
 }
 
+$('dClas').addEventListener('click', e=>{ const a=e.target.closest('a.verGal'); if(!a) return;
+  fil.tipo=a.dataset.tipo||''; fil.sub=a.dataset.sub||''; fil.det=''; galFiltro=a.dataset.filtro||'todos';
+  $('fTipo').value=fil.tipo; document.querySelectorAll('#galFiltro button').forEach(x=>x.classList.toggle('on',x.dataset.f===galFiltro)); });
 $('dDesde').addEventListener('change',e=>{ dfil.desde=e.target.value; renderInicio(); });
 $('dHasta').addEventListener('change',e=>{ dfil.hasta=e.target.value; renderInicio(); });
 $('dSub').addEventListener('change',e=>{ dfil.sub=e.target.value; renderInicio(); });
