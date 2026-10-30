@@ -1,5 +1,6 @@
 # CAMBIOS · ARKAPHOTO
 
+- v0.17.0 — 2026-10-30 — fix de escala: todas las lecturas paginadas (el tope de 1,000 filas dejaba fotos fuera de la vista); URLs firmadas solo para lo que se muestra, con caché; Galerías por páginas de 30 lotes ordenadas por fecha; Inicio muestra 100 lotes
 - v0.16.2 — 2026-10-30 — fix: Validar faltantes y TRAER recargan el estado desde BD antes de pedir (fotos entradas por la cola ya no se solicitan); "ya estaban" se cuenta aparte de los errores
 - v0.16.1 — 2026-10-30 — botón ⟷ Ancho en la barra: la página usa todo el ancho (galería con más columnas, grid de 32 por fila); se recuerda por navegador
 - v0.16.0 — 2026-10-30 — Carga de URL: "Analizar y encolar" agrupa por lote, sondea el tamaño en la base de cada URL, calcula fotos a traer (listadas + completadas) y encola por bloques automáticamente; tabla por lote; se retiran Encolar y Completar

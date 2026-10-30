@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-const CFG = { VERSION: '0.16.2', MIGRACION_ESPERADA: 13, URL_TTL: 3600 };
+const CFG = { VERSION: '0.17.0', MIGRACION_ESPERADA: 13, URL_TTL: 3600 };
 const $ = id => document.getElementById(id);
 const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
 const MAX = 32, BUCKET = 'arkaphoto';
@@ -47,7 +47,7 @@ async function route(){
   document.querySelectorAll('#menu a').forEach(a=>a.classList.toggle('on', a.dataset.v===v));
   if(!lotes.size) await cargarTodo();
   if(v==='inicio') renderInicio();
-  if(v==='galerias'){ renderGalerias(); completarDimensiones(); }
+  if(v==='galerias'){ renderGalerias(true); }
   if(v==='carga') mostrarCargaTab(cargaTab);
   if(v==='admin') { renderArbol(); renderAdminTags(); mostrarTab(adminTab); }
   if(v==='urls') colaEstado();
@@ -100,6 +100,10 @@ $('btnAncho').addEventListener('click', ()=>aplicarAncho(!document.documentEleme
 $('btnSalir').addEventListener('click', async ()=>{ await sb.auth.signOut(); lotes.clear(); show('vLogin'); });
 
 // ---------- datos
+// PostgREST devuelve máximo 1000 filas por consulta: se pagina siempre
+async function todas(construir, tam=1000){
+  const out=[]; for(let desde=0;;desde+=tam){ const { data, error } = await construir().range(desde, desde+tam-1); if(error) throw error; out.push(...(data||[])); if(!data||data.length<tam) break; } return out;
+}
 async function cargarTodo(){
   const { data: c } = await sb.from('arkaphoto_config').select('ruta_publica,tarifa_gb_usd,gb_incluidos').maybeSingle();
   cfg.base = (c?.ruta_publica||'').replace(/\/+$/,'');
@@ -108,10 +112,9 @@ async function cargarTodo(){
   await Promise.all([cargarClasif(), cargarLotesMeta(), cargarTags(), cargarImagenes()]);
 }
 async function cargarTags(){
-  const [t, lt] = await Promise.all([ sb.from('arkaphoto_tags').select('id,nombre').order('nombre'), sb.from('arkaphoto_lote_tags').select('lote,tag_id') ]);
-  if(t.error||lt.error){ toast('Error leyendo tags'); return; }
-  tags.clear(); (t.data||[]).forEach(x=>tags.set(x.id,x));
-  loteTags.clear(); (lt.data||[]).forEach(x=>{ if(!loteTags.has(x.lote)) loteTags.set(x.lote,new Set()); loteTags.get(x.lote).add(x.tag_id); });
+  let t, lt; try{ [t, lt] = await Promise.all([ todas(()=>sb.from('arkaphoto_tags').select('id,nombre').order('nombre')), todas(()=>sb.from('arkaphoto_lote_tags').select('lote,tag_id').order('lote')) ]); }catch(e){ toast('Error leyendo tags'); return; }
+  tags.clear(); t.forEach(x=>tags.set(x.id,x));
+  loteTags.clear(); lt.forEach(x=>{ if(!loteTags.has(x.lote)) loteTags.set(x.lote,new Set()); loteTags.get(x.lote).add(x.tag_id); });
 }
 const tagsDe = key => [...(loteTags.get(key)||[])].map(id=>tags.get(id)).filter(Boolean).sort((a,b)=>a.nombre.localeCompare(b.nombre));
 async function tagPorNombre(nombre){
@@ -129,9 +132,8 @@ async function cargarClasif(){
   const sel=$('fTipo'); sel.innerHTML='<option value="">Todos los tipos</option>'+hijos(null).map(t=>`<option value="${t.id}">${esc(t.nombre)}</option>`).join(''); sel.value=fil.tipo;
 }
 async function cargarLotesMeta(){
-  const { data, error } = await sb.from('arkaphoto_lotes').select('lote,nombre,clasif_id,notas,portada_seq,tamano,sondeado_en');
-  if(error){ toast('Error leyendo lotes: '+error.message); return; }
-  lotesMeta.clear(); (data||[]).forEach(m=>lotesMeta.set(m.lote,m));
+  let data; try{ data = await todas(()=>sb.from('arkaphoto_lotes').select('lote,nombre,clasif_id,notas,portada_seq,tamano,sondeado_en').order('lote')); }catch(e){ toast('Error leyendo lotes: '+e.message); return; }
+  lotesMeta.clear(); data.forEach(m=>lotesMeta.set(m.lote,m));
 }
 const hijos = pid => [...clasif.values()].filter(c=>(c.parent_id??null)===(pid??null)).sort((a,b)=>a.orden-b.orden||a.nombre.localeCompare(b.nombre));
 function rutaClasif(id){ const out=[]; let c=clasif.get(id); while(c){ out.unshift(c); c=clasif.get(c.parent_id); } return out; }
@@ -176,16 +178,33 @@ async function firmar(rutas){
   if(error){ toast('No se pudieron firmar las URLs: '+error.message); return new Map(); }
   return new Map(data.map(d=>[d.path, d.signedUrl]));
 }
+const urlCache = new Map(); // ruta -> {url, exp}
 async function cargarImagenes(){
+  let data; try{ data = await todas(()=>sb.from('arkaphoto_imagenes').select('id,lote,seq,ext,ruta,bytes,origen,favorita,oculta,ancho,alto').order('lote').order('seq')); }
+  catch(e){ toast('Error leyendo imágenes: '+e.message); return; }
   lotes.clear();
-  const { data, error } = await sb.from('arkaphoto_imagenes').select('id,lote,seq,ext,ruta,bytes,origen,favorita,oculta,ancho,alto').order('lote').order('seq');
-  if(error){ toast('Error leyendo imágenes: '+error.message); return; }
-  const urls = await firmar(data.map(r=>r.ruta));
   for(const r of data){
     const [ts,hash] = r.lote.split('-');
     if(!lotes.has(r.lote)) lotes.set(r.lote,{ts,hash,ext:r.ext,items:new Map()});
-    lotes.get(r.lote).items.set(r.seq,{id:r.id,url:urls.get(r.ruta)||'',origen:r.origen,bytes:r.bytes||0,favorita:!!r.favorita,oculta:!!r.oculta,ruta:r.ruta,ancho:r.ancho,alto:r.alto});
+    const c=urlCache.get(r.ruta); const url = c && c.exp>Date.now() ? c.url : '';
+    lotes.get(r.lote).items.set(r.seq,{id:r.id,url,origen:r.origen,bytes:r.bytes||0,favorita:!!r.favorita,oculta:!!r.oculta,ruta:r.ruta,ancho:r.ancho,alto:r.alto});
   }
+}
+// Firma solo las imágenes que se van a mostrar (por lotes), con caché hasta 5 min antes de caducar
+async function asegurarUrls(keys){
+  const rutas=[]; const items=[];
+  for(const k of keys){ const L=lotes.get(k); if(!L) continue; for(const it of L.items.values()){ if(!it.url){ rutas.push(it.ruta); items.push(it); } } }
+  if(!rutas.length) return false;
+  for(let i=0;i<rutas.length;i+=500){ const m=await firmar(rutas.slice(i,i+500)); for(const it of items.slice(i,i+500)){ const u=m.get(it.ruta); if(u){ it.url=u; urlCache.set(it.ruta,{url:u,exp:Date.now()+(CFG.URL_TTL-300)*1000}); } } }
+  return true;
+}
+// Pone src a las imágenes del DOM que esperan URL (data-ruta) tras firmar
+async function hidratarImgs(cont){
+  const keys=[...new Set([...cont.querySelectorAll('[data-lote]')].map(e=>e.dataset.lote))];
+  if(!(await asegurarUrls(keys))) return;
+  const porRuta=new Map(); for(const k of keys){ const L=lotes.get(k); if(L) for(const it of L.items.values()) porRuta.set(it.ruta,it); }
+  cont.querySelectorAll('img[data-ruta]').forEach(im=>{ const it=porRuta.get(im.dataset.ruta); if(it?.url){ im.src=it.url; im.removeAttribute('data-ruta'); } });
+  if(vistaActual()==='galerias') completarDimensiones();
 }
 $('fCfg').addEventListener('submit', async e=>{
   e.preventDefault();
@@ -203,7 +222,7 @@ const medir = url => new Promise(res=>{ const im=new Image(); im.onload=()=>res(
 let midiendo=false;
 async function completarDimensiones(max=40){
   if(midiendo) return; midiendo=true; let n=0;
-  try{ for(const L of lotes.values()) for(const it of L.items.values()){ if(it.ancho||!it.url||n>=max) continue; const d=await medir(it.url); if(!d) continue; const { error } = await sb.from('arkaphoto_imagenes').update(d).eq('id',it.id); if(!error){ Object.assign(it,d); n++; } } }
+  try{ for(const L of lotes.values()) for(const it of L.items.values()){ if(it.ancho||n>=max) continue; if(!it.url) continue; const d=await medir(it.url); if(!d) continue; const { error } = await sb.from('arkaphoto_imagenes').update(d).eq('id',it.id); if(!error){ Object.assign(it,d); n++; } } }
   finally{ midiendo=false; }
   if(n){ toast(`${n} fotos medidas`); if(vistaActual()==='galerias') renderGalerias(); }
   return n;
@@ -247,7 +266,7 @@ function renderInicio(){
     if(dfil.hasta && f > new Date(dfil.hasta+'T23:59:59')) continue;
     if(dfil.sub && String(ruta[1]?.id)!==dfil.sub) continue;
     if(dfil.q){ const texto=[etiqueta(key), key, meta.nombre, meta.notas, ...ruta.map(c=>c.nombre), ...tagsDe(key).map(t=>t.nombre)].filter(Boolean).join(' ').toLowerCase(); if(!texto.includes(dfil.q)) continue; }
-    mostrados++;
+    mostrados++; if(rows.length>=100) continue;
     const rutaTxt=ruta.map(c=>esc(c.nombre)).join(' › ');
     rows.push(`<tr><td style="white-space:nowrap">${fmtFecha(f)}</td><td><a href="#galerias" class="etq" style="font-size:.9rem" title="${esc(key)}">${esc(etiqueta(key))}</a></td><td class="ruta">${rutaTxt||'<span class="pill warn">sin clasificar</span>'}</td><td>${r.n-r.traidas}</td><td>${r.traidas}</td><td>${r.faltan}</td><td>${fmt(r.bytes)}</td><td><span class="pill ${r.faltan?'miss':'ok'}">${r.faltan?'faltan '+r.faltan:'completo'}</span></td></tr>`);
   }
@@ -258,7 +277,7 @@ function renderInicio(){
   $('dCostoSub').textContent = cfg.tarifa ? `${cobrable.toFixed(3)} GB sobre ${cfg.gbInc} GB incluidos × US$${cfg.tarifa}/GB` : 'configura la tarifa en Admin';
   $('dFav').textContent=fav; $('dFavSub').textContent=`${completos} de ${lotes.size} lotes completos`;
   $('dLotes').innerHTML = rows.join('') || `<tr><td colspan="8" class="note">${lotes.size?'Ningún lote cumple el filtro.':'Aún no hay lotes. Sube fotos en "Carga fotos".'}</td></tr>`;
-  $('dLotesN').textContent = `${mostrados} de ${lotes.size}`;
+  $('dLotesN').textContent = `${mostrados} de ${lotes.size}${mostrados>100?' · se muestran los 100 más recientes':''}`;
 }
 
 $('dDesde').addEventListener('change',e=>{ dfil.desde=e.target.value; renderInicio(); });
@@ -268,22 +287,22 @@ $('dBuscar').addEventListener('input',e=>{ dfil.q=e.target.value.trim().toLowerC
 $('dLimpiar').addEventListener('click',()=>{ Object.assign(dfil,{desde:'',hasta:'',sub:'',q:''}); $('dDesde').value=''; $('dHasta').value=''; $('dBuscar').value=''; renderInicio(); });
 
 // ---------- GALERÍAS
-$('galFiltro').addEventListener('click', e=>{ const b=e.target.closest('button'); if(!b) return; galFiltro=b.dataset.f; document.querySelectorAll('#galFiltro button').forEach(x=>x.classList.toggle('on',x===b)); renderGalerias(); });
+$('galFiltro').addEventListener('click', e=>{ const b=e.target.closest('button'); if(!b) return; galFiltro=b.dataset.f; document.querySelectorAll('#galFiltro button').forEach(x=>x.classList.toggle('on',x===b)); renderGalerias(true); });
 function pintaCascada(){
   const subs = fil.tipo ? hijos(Number(fil.tipo)) : [];
   $('fSubL').hidden = !fil.tipo; $('fSub').innerHTML='<option value="">Todos</option>'+subs.map(c=>`<option value="${c.id}">${esc(c.nombre)}</option>`).join(''); $('fSub').value=fil.sub;
   const dets = fil.sub ? hijos(Number(fil.sub)) : [];
   $('fDetL').hidden = !fil.sub; $('fDet').innerHTML='<option value="">Todos</option>'+dets.map(c=>`<option value="${c.id}">${esc(c.nombre)}</option>`).join(''); $('fDet').value=fil.det;
 }
-$('fTipo').addEventListener('change', e=>{ fil.tipo=e.target.value; fil.sub=''; fil.det=''; pintaCascada(); renderGalerias(); });
-$('fSub').addEventListener('change', e=>{ fil.sub=e.target.value; fil.det=''; pintaCascada(); renderGalerias(); });
-$('fDet').addEventListener('change', e=>{ fil.det=e.target.value; renderGalerias(); });
-$('fFormato').addEventListener('change', e=>{ fil.fmt=e.target.value; renderGalerias(); });
-$('fBuscar').addEventListener('input', e=>{ fil.q=e.target.value.trim().toLowerCase(); renderGalerias(); });
+$('fTipo').addEventListener('change', e=>{ fil.tipo=e.target.value; fil.sub=''; fil.det=''; pintaCascada(); renderGalerias(true); });
+$('fSub').addEventListener('change', e=>{ fil.sub=e.target.value; fil.det=''; pintaCascada(); renderGalerias(true); });
+$('fDet').addEventListener('change', e=>{ fil.det=e.target.value; renderGalerias(true); });
+$('fFormato').addEventListener('change', e=>{ fil.fmt=e.target.value; renderGalerias(true); });
+$('fBuscar').addEventListener('input', e=>{ fil.q=e.target.value.trim().toLowerCase(); renderGalerias(true); });
 $('galVista').addEventListener('click', e=>{ const b=e.target.closest('button[data-v]'); if(!b) return; galVista=b.dataset.v; try{ localStorage.setItem('arkaphoto-vista',galVista); }catch{} renderGalerias(); });
 $('btnColapsar').addEventListener('click', ()=>{ const todos=[...lotes.keys()]; const expandir = todos.every(k=>colapsados.has(k)); todos.forEach(k=>expandir?colapsados.delete(k):colapsados.add(k)); guardaColapsados(); renderGalerias(); });
 function portadaDe(key, L){ const meta=lotesMeta.get(key)||{}; const vis=[...L.items].filter(([,i])=>!i.oculta); if(!vis.length) return null; if(meta.portada_seq && L.items.get(meta.portada_seq) && !L.items.get(meta.portada_seq).oculta) return meta.portada_seq; const sub=vis.find(([,i])=>i.origen==='subida'); return (sub||vis[0])[0]; }
-$('fTags').addEventListener('click', e=>{ const t=e.target.closest('.tag.filtro'); if(!t) return; fil.tag = fil.tag===Number(t.dataset.id)?null:Number(t.dataset.id); renderGalerias(); });
+$('fTags').addEventListener('click', e=>{ const t=e.target.closest('.tag.filtro'); if(!t) return; fil.tag = fil.tag===Number(t.dataset.id)?null:Number(t.dataset.id); renderGalerias(true); });
 function pintaTagsFiltro(){
   const usados=new Map(); for(const set of loteTags.values()) for(const id of set) usados.set(id,(usados.get(id)||0)+1);
   $('fTags').innerHTML=[...usados].map(([id,n])=>{ const t=tags.get(id); return t?`<span class="tag filtro ${fil.tag===id?'on':''}" data-id="${id}">${esc(t.nombre)} <small>${n}</small></span>`:''; }).join('');
@@ -303,10 +322,12 @@ function pasaFiltro(key, L, r, meta){
   }
   return true;
 }
-function renderGalerias(){
+const GAL_PAG = 30; let galPag = 1;
+function renderGalerias(reset=false){
+  if(reset) galPag=1;
   pintaCascada(); pintaTagsFiltro();
-  let total=0, fav=0, visibles=0; const parts=[];
-  for(const [key,L] of lotes){
+  let total=0, fav=0, visibles=0; const parts=[]; const ordenadas=[...lotes.entries()].sort((a,b)=>fechaLote(b[0])-fechaLote(a[0]));
+  for(const [key,L] of ordenadas){
     const r=resumenLote(L,key); total+=r.n; fav+=r.fav;
     const meta=lotesMeta.get(key)||{};
     if(!pasaFiltro(key,L,r,meta)) continue;
@@ -317,7 +338,7 @@ function renderGalerias(){
         if(galFiltro==='fav' && !it.favorita) continue;
         if(galFiltro==='ocultas' ? !it.oculta : (it.oculta && !ed)) continue;
         if(fil.fmt && formatoDe(it)!==fil.fmt) continue;
-        cards.push(`<figure class="gc ${it.oculta?'oc':''} ${pseq===i?'portada':''}" data-id="${it.id}" data-seq="${i}"><img loading="lazy" src="${esc(it.url)}" alt="${esc(nombre(L,i))}" data-seq="${i}">
+        cards.push(`<figure class="gc ${it.oculta?'oc':''} ${pseq===i?'portada':''}" data-id="${it.id}" data-seq="${i}"><img loading="lazy" ${it.url?`src="${esc(it.url)}"`:`data-ruta="${esc(it.ruta)}"`} alt="${esc(nombre(L,i))}" data-seq="${i}">
           <span class="n">${i}</span>
           <div class="ov"><button class="fav ${it.favorita?'on':''}" title="Favorita" data-id="${it.id}">${it.favorita?'★':'☆'}</button><button class="hid ${it.oculta?'on':''}" title="${it.oculta?'Mostrar':'Esconder'}" data-id="${it.id}">✕</button></div>
           <div class="ov bot"><button class="sav" title="Guardar foto" data-seq="${i}">💾</button><button class="opn" title="Abrir en otra pestaña" data-seq="${i}">🔍</button></div>
@@ -327,16 +348,20 @@ function renderGalerias(){
     }
     if(!cards.length) continue;
     visibles++;
+    if(visibles>galPag*GAL_PAG) continue;
     const tg=tagsDe(key).map(t=>`<span class="tag">${esc(t.nombre)}<button type="button" class="qdel" data-id="${t.id}" title="Quitar tag">✕</button></span>`).join('');
     parts.push(`<section class="panel ${colapsados.has(key)?'col':''}" style="margin-bottom:16px" data-lote="${esc(key)}">
       <div class="ghead">
         <div class="izq"><span class="etq" title="${esc(key)}">${esc(etiqueta(key))}</span>${meta.clasif_id?'':'<span class="pill warn">sin clasificar</span>'}${r.fav?`<span class="pill ok">★ ${r.fav}</span>`:''}<span class="tags">${tg}</span></div>
         <div class="der">${barra(r.n, r.hasta, !!meta.sondeado_en)}${r.ocultas?`<span class="pill warn" title="ocultas">✕ ${r.ocultas}</span>`:''}<button class="tgl pase" data-lote="${esc(key)}" title="Pase de diapositivas">▶ Pase</button><button class="tgl zip" data-lote="${esc(key)}" title="Descargar ZIP">↓ ZIP</button><button class="tgl colap" data-lote="${esc(key)}">${colapsados.has(key)?'Expandir':'Colapsar'}</button><span class="qtag"><button class="qadd" data-lote="${esc(key)}">+ Tag</button></span><button class="ed" data-lote="${esc(key)}">Editar</button></div>
       </div>
-      ${pseq?`<div class="cover"><img src="${esc(L.items.get(pseq).url)}" alt="portada" data-seq="${pseq}"><span class="n">portada · ${pseq}</span></div>`:'<div class="cover note">Sin fotos visibles</div>'}
+      ${pseq?`<div class="cover"><img ${L.items.get(pseq).url?`src="${esc(L.items.get(pseq).url)}"`:`data-ruta="${esc(L.items.get(pseq).ruta)}"`} alt="portada" data-seq="${pseq}"><span class="n">portada · ${pseq}</span></div>`:'<div class="cover note">Sin fotos visibles</div>'}
       <div class="gal ${galVista==='2x'?'x2':galVista==='lista'?'lista':''}">${cards.join('')}</div></section>`);
   }
-  $('galBody').innerHTML = parts.join('') || '<p class="note">Nada que mostrar con este filtro.</p>';
+  const faltanPag = visibles - Math.min(visibles, galPag*GAL_PAG);
+  $('galBody').innerHTML = (parts.join('') || '<p class="note">Nada que mostrar con este filtro.</p>') + (faltanPag>0?`<div class="row" style="justify-content:center;margin:12px 0"><button id="btnGalMas" class="primary">Mostrar más (${faltanPag} galerías restantes)</button></div>`:'');
+  $('btnGalMas')?.addEventListener('click',()=>{ galPag++; renderGalerias(); });
+  hidratarImgs($('galBody'));
   document.querySelectorAll('#galVista button').forEach(b=>b.classList.toggle('on',b.dataset.v===galVista));
   $('btnColapsar').textContent = [...lotes.keys()].every(k=>colapsados.has(k)) && lotes.size ? 'Expandir todo' : 'Colapsar todo';
   $('galStats').textContent = `${visibles} de ${lotes.size} galerías · ${total} imágenes · ${fav} favoritas`;
@@ -416,8 +441,8 @@ $('galBody').addEventListener('click', async e=>{
   const col=e.target.closest('button.colap'); if(col){ const k=col.dataset.lote; colapsados.has(k)?colapsados.delete(k):colapsados.add(k); guardaColapsados(); renderGalerias(); return; }
   const pz=e.target.closest('button.zip'); if(pz){ descargarZip([pz.dataset.lote]); return; }
   const ps=e.target.closest('button.pase'); if(ps){ abrirPase(ps.dataset.lote); return; }
-  const sv=e.target.closest('button.sav'); if(sv){ const L=lotes.get(sv.closest('section').dataset.lote), seq=Number(sv.dataset.seq); guardarFoto(L.items.get(seq).url, nombre(L,seq)); return; }
-  const op=e.target.closest('button.opn'); if(op){ const L=lotes.get(op.closest('section').dataset.lote), seq=Number(op.dataset.seq); window.open(L.items.get(seq).url,'_blank','noopener'); return; }
+  const sv=e.target.closest('button.sav'); if(sv){ const k=sv.closest('section').dataset.lote, L=lotes.get(k), seq=Number(sv.dataset.seq); await asegurarUrls([k]); guardarFoto(L.items.get(seq).url, nombre(L,seq)); return; }
+  const op=e.target.closest('button.opn'); if(op){ const k=op.closest('section').dataset.lote, L=lotes.get(k), seq=Number(op.dataset.seq); const w=window.open('','_blank'); await asegurarUrls([k]); if(w) w.location=L.items.get(seq).url; return; }
   const img=e.target.closest('img[data-seq]'); if(img){ abrirPase(img.closest('section').dataset.lote, Number(img.dataset.seq)); return; }
   const b=e.target.closest('button.fav'); if(!b) return;
   const id=Number(b.dataset.id); let it; for(const L of lotes.values()) for(const x of L.items.values()) if(x.id===id) it=x;
@@ -430,8 +455,8 @@ $('galBody').addEventListener('click', async e=>{
 
 // ---------- PASE (lightbox)
 let pase = { lista:[], i:0 };
-function abrirPase(key, seq){
-  const L=lotes.get(key); if(!L) return;
+async function abrirPase(key, seq){
+  const L=lotes.get(key); if(!L) return; await asegurarUrls([key]);
   pase.lista=[...L.items].filter(([,it])=>!it.oculta).map(([s,it])=>({seq:s,url:it.url,nombre:nombre(L,s)}));
   if(!pase.lista.length){ toast('Sin fotos visibles'); return; }
   pase.i=Math.max(0, pase.lista.findIndex(x=>x.seq===seq)); $('lbTitulo').textContent=etiqueta(key);
@@ -455,6 +480,7 @@ async function descargarZip(keys){
   if(typeof JSZip==='undefined'){ toast('No cargó la librería ZIP'); return; }
   const zip=new JSZip(); let n=0, fallas=0;
   toast('Armando ZIP…');
+  await asegurarUrls(keys);
   for(const key of keys){
     const L=lotes.get(key); if(!L) continue; const carpeta=zip.folder(etiqueta(key).replace(/[^\w\- ]+/g,'_'));
     for(const [seq,it] of L.items){ if(it.oculta) continue;
@@ -557,7 +583,7 @@ function render(){
     const L=lotes.get(key);
     const miss=faltantes(L,key), hasta=rangoEsperado(L,key); total+=miss.length;
     miss.forEach(n=>lastMissing.push({key,L,n}));
-    const d=document.createElement('div'); d.className='lote';
+    const d=document.createElement('div'); d.className='lote'; d.dataset.lote=key;
     const ruta=rutaClasif((lotesMeta.get(key)||{}).clasif_id).map(c=>esc(c.nombre)).join(' › ');
     const sel = hist?selHist:selCarga;
     d.innerHTML = `<div class="lote-head"><input type="checkbox" class="selh" data-lote="${esc(key)}" ${sel.has(key)?'checked':''}><span class="etq" style="font-size:.9rem" title="${esc(key)}">${esc(etiqueta(key))}</span><span class="ruta">${ruta||'<span class="pill warn">sin clasificar</span>'}</span><span class="pill ${miss.length?'miss':'ok'}">${miss.length?miss.length+' faltantes':'completo'}</span>${barra(L.items.size, hasta, !!(lotesMeta.get(key)||{}).sondeado_en)}</div>`;
@@ -565,7 +591,7 @@ function render(){
     for(let i=1;i<=MAX;i++){
       const c=document.createElement('div'); c.className='cell'; c.dataset.n=i;
       const it=L.items.get(i);
-      if(it){ c.classList.add('has'); if(it.origen==='traida') c.classList.add('traida'); const im=document.createElement('img'); im.loading='lazy'; im.src=it.url; im.alt=nombre(L,i); c.appendChild(im); }
+      if(it){ c.classList.add('has'); if(it.origen==='traida') c.classList.add('traida'); const im=document.createElement('img'); im.loading='lazy'; if(it.url) im.src=it.url; else im.dataset.ruta=it.ruta; im.alt=nombre(L,i); c.appendChild(im); }
       else if(i<=hasta){ c.classList.add('miss'); c.textContent=i; }
       else { c.classList.add('out'); c.textContent=i; }
       c.title=nombre(L,i)+(it?` · ${it.origen}`:i<=hasta?' · falta':' · fuera de rango');
@@ -573,7 +599,7 @@ function render(){
     }
     d.appendChild(g); frag.appendChild(d);
   }
-  (hist?$('histLotes'):$('lotes')).replaceChildren(frag);
+  (hist?$('histLotes'):$('lotes')).replaceChildren(frag); hidratarImgs(hist?$('histLotes'):$('lotes'));
   if(hist && !keys.length) $('histLotes').innerHTML=`<p class="note">${histTotal?'Ningún lote cumple el filtro.':'Aún no hay lotes.'}</p>`;
   if(hist){ const b=$('btnSelTodos'); b.textContent=`Seleccionar visibles (${keys.length})`; document.querySelectorAll('#histFiltro button').forEach(x=>x.classList.toggle('on',x.dataset.f===histFiltro)); }
   $('selN').textContent=`${[...selHist].filter(k=>lotes.has(k)).length} seleccionados`;
