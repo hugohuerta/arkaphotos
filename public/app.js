@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-const CFG = { VERSION: '0.11.1', MIGRACION_ESPERADA: 10, URL_TTL: 3600 };
+const CFG = { VERSION: '0.12.0', MIGRACION_ESPERADA: 11, URL_TTL: 3600 };
 const $ = id => document.getElementById(id);
 const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
 const MAX = 32, BUCKET = 'arkaphoto';
@@ -23,7 +23,7 @@ const cfg = { base:'', tarifa:0.021, gbInc:1 };
 const lotes = new Map();   // key -> {ts,hash,ext,items:Map(seq->{id,url,origen,bytes,favorita,ruta})}
 const raw = new Map();     // archivos locales pendientes de subir (nombre -> File)
 const bad = []; let dupes = [], lastMissing = [], galFiltro = 'todos';
-const fil = { tipo:'', sub:'', det:'', q:'', tag:null };
+const fil = { tipo:'', sub:'', det:'', q:'', tag:null, fmt:'' };
 let galVista = '1x'; const colapsados = new Set(); let editando = null;
 const sesionLotes = new Set(); const selHist = new Set(); const selCarga = new Set(); let cargaTab = 'cargar';
 try{ galVista = localStorage.getItem('arkaphoto-vista')||'1x'; JSON.parse(localStorage.getItem('arkaphoto-colapsados')||'[]').forEach(k=>colapsados.add(k)); }catch{}
@@ -47,7 +47,7 @@ async function route(){
   document.querySelectorAll('#menu a').forEach(a=>a.classList.toggle('on', a.dataset.v===v));
   if(!lotes.size) await cargarTodo();
   if(v==='inicio') renderInicio();
-  if(v==='galerias') renderGalerias();
+  if(v==='galerias'){ renderGalerias(); completarDimensiones(); }
   if(v==='carga') mostrarCargaTab(cargaTab);
   if(v==='admin') { renderArbol(); renderAdminTags(); mostrarTab(adminTab); }
 }
@@ -171,13 +171,13 @@ async function firmar(rutas){
 }
 async function cargarImagenes(){
   lotes.clear();
-  const { data, error } = await sb.from('arkaphoto_imagenes').select('id,lote,seq,ext,ruta,bytes,origen,favorita,oculta').order('lote').order('seq');
+  const { data, error } = await sb.from('arkaphoto_imagenes').select('id,lote,seq,ext,ruta,bytes,origen,favorita,oculta,ancho,alto').order('lote').order('seq');
   if(error){ toast('Error leyendo imágenes: '+error.message); return; }
   const urls = await firmar(data.map(r=>r.ruta));
   for(const r of data){
     const [ts,hash] = r.lote.split('-');
     if(!lotes.has(r.lote)) lotes.set(r.lote,{ts,hash,ext:r.ext,items:new Map()});
-    lotes.get(r.lote).items.set(r.seq,{id:r.id,url:urls.get(r.ruta)||'',origen:r.origen,bytes:r.bytes||0,favorita:!!r.favorita,oculta:!!r.oculta,ruta:r.ruta});
+    lotes.get(r.lote).items.set(r.seq,{id:r.id,url:urls.get(r.ruta)||'',origen:r.origen,bytes:r.bytes||0,favorita:!!r.favorita,oculta:!!r.oculta,ruta:r.ruta,ancho:r.ancho,alto:r.alto});
   }
 }
 $('fCfg').addEventListener('submit', async e=>{
@@ -189,6 +189,18 @@ $('fCfg').addEventListener('submit', async e=>{
 });
 
 // ---------- lógica de lotes
+// Formato por proporción: la más cercana entre 1:1, 16:9, 9:16, 4:3, 3:4 (tolerancia 6 %); si no, "otro"; sin medidas, "?"
+const FORMATOS = [['1:1',1],['16:9',16/9],['9:16',9/16],['4:3',4/3],['3:4',3/4]];
+function formatoDe(it){ if(!it.ancho||!it.alto) return '?'; const r=it.ancho/it.alto; let mejor='otro', d=0.06; for(const [n,v] of FORMATOS){ const dd=Math.abs(r-v)/v; if(dd<d){ d=dd; mejor=n; } } return mejor; }
+const medir = url => new Promise(res=>{ const im=new Image(); im.onload=()=>res({ancho:im.naturalWidth,alto:im.naturalHeight}); im.onerror=()=>res(null); im.src=url; });
+let midiendo=false;
+async function completarDimensiones(max=40){
+  if(midiendo) return; midiendo=true; let n=0;
+  try{ for(const L of lotes.values()) for(const it of L.items.values()){ if(it.ancho||!it.url||n>=max) continue; const d=await medir(it.url); if(!d) continue; const { error } = await sb.from('arkaphoto_imagenes').update(d).eq('id',it.id); if(!error){ Object.assign(it,d); n++; } } }
+  finally{ midiendo=false; }
+  if(n){ toast(`${n} fotos medidas`); if(vistaActual()==='galerias') renderGalerias(); }
+  return n;
+}
 const barra = (n, hasta, sond=true) => { const pct=hasta?Math.round(100*n/hasta):0; return `<span class="prog ${pct>=100?'full':''}" title="${sond?'tamaño sondeado en la ruta pública':'tamaño asumido por lo subido (sin sondear)'}"><i style="width:${pct}%"></i><b>${n} de ${hasta}${sond?'':' ?'}<small>${pct}%</small></b></span>`; };
 const pow2 = n => { let p=1; while(p<n) p*=2; return Math.min(MAX,p); };
 function rangoEsperado(L, key){
@@ -259,6 +271,7 @@ function pintaCascada(){
 $('fTipo').addEventListener('change', e=>{ fil.tipo=e.target.value; fil.sub=''; fil.det=''; pintaCascada(); renderGalerias(); });
 $('fSub').addEventListener('change', e=>{ fil.sub=e.target.value; fil.det=''; pintaCascada(); renderGalerias(); });
 $('fDet').addEventListener('change', e=>{ fil.det=e.target.value; renderGalerias(); });
+$('fFormato').addEventListener('change', e=>{ fil.fmt=e.target.value; renderGalerias(); });
 $('fBuscar').addEventListener('input', e=>{ fil.q=e.target.value.trim().toLowerCase(); renderGalerias(); });
 $('galVista').addEventListener('click', e=>{ const b=e.target.closest('button[data-v]'); if(!b) return; galVista=b.dataset.v; try{ localStorage.setItem('arkaphoto-vista',galVista); }catch{} renderGalerias(); });
 $('btnColapsar').addEventListener('click', ()=>{ const todos=[...lotes.keys()]; const expandir = todos.every(k=>colapsados.has(k)); todos.forEach(k=>expandir?colapsados.delete(k):colapsados.add(k)); guardaColapsados(); renderGalerias(); });
@@ -296,13 +309,14 @@ function renderGalerias(){
       if(it){
         if(galFiltro==='fav' && !it.favorita) continue;
         if(galFiltro==='ocultas' ? !it.oculta : (it.oculta && !ed)) continue;
+        if(fil.fmt && formatoDe(it)!==fil.fmt) continue;
         cards.push(`<figure class="gc ${it.oculta?'oc':''} ${pseq===i?'portada':''}" data-id="${it.id}" data-seq="${i}"><img loading="lazy" src="${esc(it.url)}" alt="${esc(nombre(L,i))}" data-seq="${i}">
           <span class="n">${i}</span>
           <div class="ov"><button class="fav ${it.favorita?'on':''}" title="Favorita" data-id="${it.id}">${it.favorita?'★':'☆'}</button><button class="hid ${it.oculta?'on':''}" title="${it.oculta?'Mostrar':'Esconder'}" data-id="${it.id}">✕</button></div>
           <div class="ov bot"><button class="sav" title="Guardar foto" data-seq="${i}">💾</button><button class="opn" title="Abrir en otra pestaña" data-seq="${i}">🔍</button></div>
-          ${galVista==='lista'?`<div class="fila"><span class="key">${esc(nombre(L,i))}</span><span>${fmt(it.bytes)}</span><span class="pill ${it.origen==='traida'?'ok':'warn'}">${it.origen}</span>${it.favorita?'<span class="pill ok">★</span>':''}${it.oculta?'<span class="pill miss">oculta</span>':''}</div>`:''}
+          ${galVista==='lista'?`<div class="fila"><span class="key">${esc(nombre(L,i))}</span><span>${fmt(it.bytes)}</span><span>${it.ancho?`${it.ancho}×${it.alto} · ${formatoDe(it)}`:'sin medir'}</span><span class="pill ${it.origen==='traida'?'ok':'warn'}">${it.origen}</span>${it.favorita?'<span class="pill ok">★</span>':''}${it.oculta?'<span class="pill miss">oculta</span>':''}</div>`:''}
           ${ed?`<figcaption><b>${i}</b><span class="pill ${it.origen==='traida'?'ok':'warn'}">${it.origen}</span>${pseq===i?'<span class="pill ok">portada</span>':`<button class="quiet mkp" data-seq="${i}" style="padding:2px 6px;font-size:.72rem">portada</button>`}<a href="${esc(it.url)}" target="_blank" rel="noopener">abrir</a></figcaption>`:''}</figure>`);
-      } else if(galFiltro!=='fav' && galFiltro!=='ocultas') cards.push(`<figure class="gc"><div class="cell miss" style="aspect-ratio:1;border:0;border-radius:0">${i}</div>${ed?`<figcaption><b>${i}</b><span class="pill miss">falta</span></figcaption>`:''}</figure>`);
+      } else if(galFiltro!=='fav' && galFiltro!=='ocultas' && !fil.fmt) cards.push(`<figure class="gc"><div class="cell miss" style="aspect-ratio:1;border:0;border-radius:0">${i}</div>${ed?`<figcaption><b>${i}</b><span class="pill miss">falta</span></figcaption>`:''}</figure>`);
     }
     if(!cards.length) continue;
     visibles++;
@@ -505,7 +519,8 @@ async function subir(elegidos){
     $('upStatus').textContent = `Subiendo ${++n} de ${elegidos.length}: ${canon}`;
     const up = await sb.storage.from(BUCKET).upload(ruta, file, { upsert:true, contentType:file.type||(ext==='png'?'image/png':'image/jpeg') });
     if(up.error){ toast(`Falló ${canon}: ${up.error.message}`); continue; }
-    const ins = await sb.from('arkaphoto_imagenes').upsert({ user_id:session.user.id, lote, seq, ext, nombre:canon, ruta, bytes:file.size, origen:'subida' }, { onConflict:'user_id,lote,seq' });
+    const ourl=URL.createObjectURL(file); const d=(await medir(ourl))||{}; URL.revokeObjectURL(ourl);
+    const ins = await sb.from('arkaphoto_imagenes').upsert({ user_id:session.user.id, lote, seq, ext, nombre:canon, ruta, bytes:file.size, origen:'subida', ancho:d.ancho||null, alto:d.alto||null }, { onConflict:'user_id,lote,seq' });
     if(ins.error) toast(`Subida pero sin registro ${canon}: ${ins.error.message}`);
   }
   $('upStatus').textContent = elegidos.length ? `${elegidos.length} imágenes subidas.` : '';
@@ -753,7 +768,9 @@ async function verificarSistema(){
       fila(ep, h===CFG.VERSION?'ok':h?'warn':'bad', h?`v${h}`:'sin x-app-version'); }catch(e){ fila(ep,'bad','sin respuesta'); }
   }
   const { count } = await sb.from('arkaphoto_imagenes').select('id',{count:'exact',head:true});
+  const { count: sinDim } = await sb.from('arkaphoto_imagenes').select('id',{count:'exact',head:true}).is('ancho',null);
   fila('imágenes', 'ok', `${count} filas en arkaphoto_imagenes`);
+  fila('dimensiones', sinDim?'warn':'ok', sinDim?`${sinDim} fotos sin medir (se miden al abrir Galerías)`:'todas medidas');
   $('sysBody').innerHTML=out.join('');
   $('sysHora').textContent='verificado '+new Date().toLocaleTimeString('es-MX');
 }

@@ -1,5 +1,6 @@
 # CAMBIOS · ARKAPHOTO
 
+- v0.12.0 — 2026-10-30 — filtro por formato en Galerías (1:1, 16:9, 9:16, 4:3, 3:4, otro); ancho/alto por foto (mig 11): se miden al subir, en traer (cabecera PNG/JPEG en servidor) y las existentes al abrir Galerías
 - v0.11.1 — 2026-10-30 — barra de progreso 0–100 % en el conteo de cada lote (Carga y Galerías)
 - v0.11.0 — 2026-10-30 — tamaño de lote por potencia de 2 (1·2·4·8·16·32) determinado sondeando la ruta pública de mayor a menor (/api/sondear); se guarda por lote (mig 10); sondeo automático al subir y botón en Histórico; desaparece la regla "bloques de 16"
 - v0.10.2 — 2026-10-30 — Cargar: banner "Faltan X fotos" arriba de los lotes con acceso directo a validar/traer; tras clasificar, aviso FOTOS CLASIFICADAS con "Nueva carga" (limpia la sesión y recarga datos)

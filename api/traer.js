@@ -5,6 +5,7 @@
 // Antes de descargar comprueba que la posición no exista ya en arkaphoto_imagenes.
 import { createClient } from '@supabase/supabase-js';
 import { conVersion } from './_version.js';
+import { dimensiones } from './_dims.js';
 
 export const config = { maxDuration: 60 };
 
@@ -92,8 +93,9 @@ export default async function handler(req, res) {
         const ruta = `${user.id}/${t.lote}/${t.nombre}`;
         const up = await admin.storage.from('arkaphoto').upload(ruta, buf, { contentType: t.ext === 'png' ? 'image/png' : 'image/jpeg', upsert: true });
         if (up.error) { Object.assign(t, { ok: false, status: 500, error: up.error.message }); continue; }
+        const { ancho, alto } = dimensiones(buf);
         const ins = await admin.from('arkaphoto_imagenes').upsert(
-          { user_id: user.id, lote: t.lote, seq: t.seq, ext: t.ext, nombre: t.nombre, ruta, bytes: buf.length, origen: 'traida', url_origen: t.url },
+          { user_id: user.id, lote: t.lote, seq: t.seq, ext: t.ext, nombre: t.nombre, ruta, bytes: buf.length, origen: 'traida', url_origen: t.url, ancho, alto },
           { onConflict: 'user_id,lote,seq' });
         if (ins.error) { Object.assign(t, { ok: false, status: 500, error: ins.error.message }); continue; }
         Object.assign(t, { ok: true, bytes: buf.length, ruta });
