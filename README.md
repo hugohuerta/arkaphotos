@@ -70,7 +70,7 @@ vercel
 
 - **Inicio**: fotos, espacio ocupado, costo aproximado mensual ((GB − incluidos) × tarifa, ambos editables en Admin), favoritas; tabla por lote.
 - **Galerías**: por lote, con ★ favorita; filtro en cascada Tipo → Subgrupo → Detalle, búsqueda de texto, filtro por tag y estado (todos / favoritas / incompletos / sin clasificar). "Editar" asigna nombre, clasificación (Tipo → Subgrupo → Detalle), notas y tags (existentes o nuevos al escribir). Etiqueta: `SUBGRUPO - DETALLE - <ts>` (o `LOTE - <ts>`), con `-A/-B` si el timestamp se repite. "+ Tag" agrega tags sin abrir el editor; ✕ en el tag lo quita. Vistas Cuadrícula / 2X / Pase (clic en una foto o ▶ Pase); Colapsar muestra solo la portada; ↓ ZIP descarga el lote (o las galerías visibles); ★ favorita y ✕ esconder por foto. Imágenes por URL firmada (1 h).
-- **Carga fotos**: subida PNG/JPG; resuelve copias `(n)`; detecta faltantes 1–32; "TRAER" las descarga de `{ruta}/{nombre}`.
+- **Carga fotos**: pestaña *Cargar* (subida PNG/JPG con clasificación opcional para esa carga; resuelve copias `(n)`; detecta faltantes 1–32; "TRAER" las descarga de `{ruta}/{nombre}`) y pestaña *Histórico* (todos los lotes, selección múltiple, clasificación masiva, validar faltantes).
 - **Carga de URL**: lista de URLs (una por línea); "Analizar" clasifica nueva / ya existe / repetida / no reconocida; "Traer nuevas" las descarga vía `/api/traer {urls}`.
 - **Admin**: clasificación de galerías (árbol de 3 niveles), configuración (ruta pública, rango, tarifa, GB incluidos), Sistema (versiones servidas vs esperadas, migración aplicada vs esperada, `x-app-version` de cada función), migraciones aplicadas, validación registro vs bucket.
 

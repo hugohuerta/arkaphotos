@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-const CFG = { VERSION: '0.9.0', MIGRACION_ESPERADA: 9, URL_TTL: 3600 };
+const CFG = { VERSION: '0.10.0', MIGRACION_ESPERADA: 9, URL_TTL: 3600 };
 const $ = id => document.getElementById(id);
 const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
 const MAX = 32, BUCKET = 'arkaphoto';
@@ -25,6 +25,7 @@ const raw = new Map();     // archivos locales pendientes de subir (nombre -> Fi
 const bad = []; let dupes = [], lastMissing = [], galFiltro = 'todos';
 const fil = { tipo:'', sub:'', det:'', q:'', tag:null };
 let galVista = '1x'; const colapsados = new Set(); let editando = null;
+const sesionLotes = new Set(); const selHist = new Set(); let cargaTab = 'cargar';
 try{ galVista = localStorage.getItem('arkaphoto-vista')||'1x'; JSON.parse(localStorage.getItem('arkaphoto-colapsados')||'[]').forEach(k=>colapsados.add(k)); }catch{}
 const guardaColapsados = ()=>{ try{ localStorage.setItem('arkaphoto-colapsados', JSON.stringify([...colapsados])); }catch{} };
 const tags = new Map();        // id -> {id,nombre}
@@ -47,7 +48,7 @@ async function route(){
   if(!lotes.size) await cargarTodo();
   if(v==='inicio') renderInicio();
   if(v==='galerias') renderGalerias();
-  if(v==='carga') render();
+  if(v==='carga') mostrarCargaTab(cargaTab);
   if(v==='admin') { renderArbol(); renderAdminTags(); mostrarTab(adminTab); }
 }
 window.addEventListener('hashchange', route);
@@ -117,6 +118,7 @@ async function cargarClasif(){
   const { data, error } = await sb.from('arkaphoto_clasif').select('id,parent_id,nivel,nombre,orden').order('nivel').order('orden').order('nombre');
   if(error){ toast('Error leyendo clasificación: '+error.message); return; }
   clasif.clear(); (data||[]).forEach(c=>clasif.set(c.id,c));
+  cascCarga.pinta(); cascMasivo.pinta();
   const sel=$('fTipo'); sel.innerHTML='<option value="">Todos los tipos</option>'+hijos(null).map(t=>`<option value="${t.id}">${esc(t.nombre)}</option>`).join(''); sel.value=fil.tipo;
 }
 async function cargarLotesMeta(){
@@ -127,6 +129,24 @@ async function cargarLotesMeta(){
 const hijos = pid => [...clasif.values()].filter(c=>(c.parent_id??null)===(pid??null)).sort((a,b)=>a.orden-b.orden||a.nombre.localeCompare(b.nombre));
 function rutaClasif(id){ const out=[]; let c=clasif.get(id); while(c){ out.unshift(c); c=clasif.get(c.parent_id); } return out; }
 const tipoDe = id => rutaClasif(id)[0]?.id ?? null;
+// Tres selects en cascada; devuelve {valor(), reset(), pinta()}
+function cascada(idT, idS, idD){
+  const T=$(idT), S=$(idS), D=$(idD);
+  const opts=(list,vacio='—')=>`<option value="">${vacio}</option>`+list.map(c=>`<option value="${c.id}">${esc(c.nombre)}</option>`).join('');
+  const pinta=()=>{ const t=T.value; T.innerHTML=opts(hijos(null)); T.value=t; const sv=S.value; S.innerHTML=opts(T.value?hijos(Number(T.value)):[]); S.value=sv; const dv=D.value; D.innerHTML=opts(S.value?hijos(Number(S.value)):[]); D.value=dv; };
+  T.addEventListener('change',()=>{ S.value=''; D.value=''; pinta(); }); S.addEventListener('change',()=>{ D.value=''; pinta(); });
+  return { pinta, valor:()=>Number(D.value||S.value||T.value)||null, reset:()=>{ T.value=''; S.value=''; D.value=''; pinta(); } };
+}
+const cascCarga = cascada('cTipo','cSub','cDet'), cascMasivo = cascada('mTipo','mSub','mDet');
+async function clasificarLotes(keys, clasif_id){
+  let n=0;
+  for(const key of keys){
+    const meta=lotesMeta.get(key)||{}; const row={ ...meta, user_id:session.user.id, lote:key, clasif_id, actualizado:new Date().toISOString() };
+    const { error } = await sb.from('arkaphoto_lotes').upsert(row); if(error){ toast(`${etiqueta(key)}: ${error.message}`); continue; }
+    lotesMeta.set(key,row); n++;
+  }
+  return n;
+}
 
 const fechaLote = key => { const t=Number(key.split('-')[0]); return t>1e11 ? new Date(t) : new Date(t*1000); };
 const fmtFecha = d => d.toLocaleDateString('es-MX',{ year:'numeric', month:'short', day:'2-digit' });
@@ -427,8 +447,13 @@ async function addFiles(list){
     if(!RX.test(f.name)){ if(!bad.includes(f.name)) bad.push(f.name); continue; }
     if(!raw.has(f.name)) raw.set(f.name,f);
   }
-  await subir(resolverDuplicados());
-  await cargarImagenes(); render();
+  const elegidos=resolverDuplicados();
+  await subir(elegidos);
+  const nuevos=[...new Set(elegidos.map(({m})=>`${m[1]}-${m[2].toLowerCase()}`))];
+  nuevos.forEach(k=>sesionLotes.add(k));
+  const cid=cascCarga.valor();
+  if(cid && nuevos.length){ const n=await clasificarLotes(nuevos, cid); if(n) toast(`${n} lote(s) clasificados`); }
+  await cargarImagenes(); mostrarCargaTab('cargar');
 }
 function resolverDuplicados(){
   const grupos = new Map();
@@ -470,18 +495,31 @@ async function subir(elegidos){
   }
   $('upStatus').textContent = elegidos.length ? `${elegidos.length} imágenes subidas.` : '';
 }
+function mostrarCargaTab(t){
+  cargaTab=t;
+  document.querySelectorAll('#cargaTabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
+  document.querySelectorAll('#v-carga [data-ctab]').forEach(d=>d.hidden = d.dataset.ctab!==t);
+  render();
+}
+$('cargaTabs').addEventListener('click', e=>{ const b=e.target.closest('button[data-t]'); if(b) mostrarCargaTab(b.dataset.t); });
+
 function render(){
-  const nArch=[...lotes.values()].reduce((a,L)=>a+L.items.size,0);
-  $('resumen').hidden = nArch===0 && bad.length===0;
-  $('lotes').hidden = lotes.size===0;
-  $('sArch').textContent=nArch; $('sLotes').textContent=lotes.size; $('sBad').textContent=bad.length; $('sDup').textContent=dupes.length;
+  const hist = cargaTab==='hist';
+  const keys = hist ? [...lotes.keys()] : [...sesionLotes].filter(k=>lotes.has(k));
+  const nArch=keys.reduce((a,k)=>a+lotes.get(k).items.size,0);
+  $('resumen').hidden = hist || (nArch===0 && bad.length===0);
+  $('lotes').hidden = hist || keys.length===0;
+  $('sArch').textContent=nArch; $('sLotes').textContent=keys.length; $('sBad').textContent=bad.length; $('sDup').textContent=dupes.length;
+  if(!hist && !keys.length) $('upStatus').textContent = $('upStatus').textContent || 'Aquí verás solo lo que subas en esta sesión; lo anterior está en Histórico.';
   lastMissing=[]; let total=0;
   const frag=document.createDocumentFragment();
-  for(const [key,L] of lotes){
+  for(const key of keys){
+    const L=lotes.get(key);
     const miss=faltantes(L), hasta=rangoEsperado(L); total+=miss.length;
     miss.forEach(n=>lastMissing.push({key,L,n}));
     const d=document.createElement('div'); d.className='lote';
-    d.innerHTML = `<div class="lote-head"><span class="etq" style="font-size:.9rem">${esc(etiqueta(key))}</span><span class="key" style="color:var(--muted)">${esc(key)}</span><span class="pill ${miss.length?'miss':'ok'}">${miss.length?miss.length+' faltantes':'completo'}</span><span class="pill warn">${L.items.size} de ${hasta}</span></div>`;
+    const ruta=rutaClasif((lotesMeta.get(key)||{}).clasif_id).map(c=>esc(c.nombre)).join(' › ');
+    d.innerHTML = `<div class="lote-head">${hist?`<input type="checkbox" class="selh" data-lote="${esc(key)}" ${selHist.has(key)?'checked':''}>`:''}<span class="etq" style="font-size:.9rem" title="${esc(key)}">${esc(etiqueta(key))}</span><span class="ruta">${ruta||'<span class="pill warn">sin clasificar</span>'}</span><span class="pill ${miss.length?'miss':'ok'}">${miss.length?miss.length+' faltantes':'completo'}</span><span class="pill warn">${L.items.size} de ${hasta}</span></div>`;
     const g=document.createElement('div'); g.className='seq';
     for(let i=1;i<=MAX;i++){
       const c=document.createElement('div'); c.className='cell'; c.dataset.n=i;
@@ -494,15 +532,28 @@ function render(){
     }
     d.appendChild(g); frag.appendChild(d);
   }
-  $('lotes').replaceChildren(frag);
+  (hist?$('histLotes'):$('lotes')).replaceChildren(frag);
+  if(hist && !keys.length) $('histLotes').innerHTML='<p class="note">Aún no hay lotes.</p>';
+  $('selN').textContent=`${[...selHist].filter(k=>lotes.has(k)).length} seleccionados`;
   $('sFalt').textContent=total;
-  $('pregunta').hidden = total===0; $('faltantes').hidden = true;
-  if(total) $('preguntaTxt').textContent = `Hay ${total} imágenes faltantes en ${[...lotes.values()].filter(L=>faltantes(L).length).length} lote(s). ¿Quieres que validemos si existen en la ruta pública?`;
+  $('pregunta').hidden = hist || total===0; $('faltantes').hidden = true;
+  if(total) $('preguntaTxt').textContent = `Hay ${total} imágenes faltantes en ${keys.filter(k=>faltantes(lotes.get(k)).length).length} lote(s). ¿Quieres que validemos si existen en la ruta pública?`;
   $('noRec').hidden = bad.length===0; $('badList').textContent = bad.join('\n');
   $('dupSec').hidden = dupes.length===0;
   const dl=$('dupList'); dl.replaceChildren();
   dupes.forEach(d=>{ const li=document.createElement('li'); li.innerHTML=`<span class="n ${d.ok?'okc':''}">${d.ok?'✓':'!'}</span><span>${esc(d.name)}</span><span class="note">${esc(d.estado)}</span>`; dl.appendChild(li); });
 }
+$('histLotes').addEventListener('change', e=>{ const c=e.target.closest('input.selh'); if(!c) return; c.checked?selHist.add(c.dataset.lote):selHist.delete(c.dataset.lote); $('selN').textContent=`${selHist.size} seleccionados`; });
+$('btnSelTodos').addEventListener('click', ()=>{ const todos=[...lotes.keys()]; const quitar=todos.every(k=>selHist.has(k)); todos.forEach(k=>quitar?selHist.delete(k):selHist.add(k)); render(); });
+$('btnMasivo').addEventListener('click', ()=>{ if(!selHist.size){ toast('Selecciona al menos un lote'); return; } $('masivo').hidden=false; });
+$('btnMasivoNo').addEventListener('click', ()=>{ $('masivo').hidden=true; });
+$('btnMasivoOk').addEventListener('click', async ()=>{ const cid=cascMasivo.valor(); if(!cid){ toast('Elige al menos el Tipo'); return; } const n=await clasificarLotes([...selHist].filter(k=>lotes.has(k)), cid); toast(`${n} lote(s) clasificados`); $('masivo').hidden=true; selHist.clear(); render(); });
+$('btnValidarSel').addEventListener('click', ()=>{
+  const keys=(selHist.size?[...selHist]:[...lotes.keys()]).filter(k=>lotes.has(k));
+  lastMissing=[]; keys.forEach(key=>{ const L=lotes.get(key); faltantes(L).forEach(n=>lastMissing.push({key,L,n})); });
+  if(!lastMissing.length){ toast('Sin faltantes en '+(selHist.size?'los seleccionados':'ningún lote')); $('faltantes').hidden=true; return; }
+  $('btnSi').click();
+});
 $('btnSi').addEventListener('click',()=>{
   if(!cfg.base){ toast('Configura la ruta pública en Admin'); }
   const ul=$('missList'); ul.replaceChildren();

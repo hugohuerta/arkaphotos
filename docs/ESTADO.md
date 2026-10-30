@@ -1,6 +1,6 @@
 # ESTADO · ARKAPHOTO
 
-Sesión: ARKAPHOTO — organizador de lotes · Versión: v0.9.0 · Última migración: 09 (`supabase/09_ocultas_portada.sql`) · Actualizado: 2026-10-29
+Sesión: ARKAPHOTO — organizador de lotes · Versión: v0.10.0 · Última migración: 09 (`supabase/09_ocultas_portada.sql`) · Actualizado: 2026-10-29
 
 ## 1. Qué es
 Organizador personal de imágenes de un generador. Sube lotes `<ts>-<hash>-<seq>.<ext>` (seq 1–32), detecta posiciones faltantes, las trae de una ruta pública (AWS) y guarda todo en Supabase Storage. Un solo usuario.
@@ -20,6 +20,7 @@ Organizador personal de imágenes de un generador. Sube lotes `<ts>-<hash>-<seq>
 - 2026-10-29 · Tags: libres, por lote, N a N (`arkaphoto_tags` + `arkaphoto_lote_tags`); se crean al escribir en Editar (Enter o coma), se renombran/borran en Admin → Clasificación (borrar solo sin uso). La búsqueda de Galerías cubre etiqueta, clave, nombre, notas, clasificación y tags.
 - 2026-10-29 · Ocultas: `imagenes.oculta`; salen de la vista normal, del pase, de la portada y del ZIP; se recuperan con el filtro Ocultas o en modo Editar. Portada: `lotes.portada_seq`; si no hay, la primera subida visible. Estado de colapsado y vista (1x/2x) en localStorage del navegador. ZIP sin compresión (STORE) armado en el navegador con JSZip 3.10.1.
 - 2026-10-29 · Fecha de lote = timestamp de la clave (segundos Unix; si viene en ms también se interpreta). Es la única fecha disponible: no se guarda fecha de carga por lote.
+- 2026-10-29 · Carga: la clasificación elegida al subir se aplica a todos los lotes de esa carga (sobrescribe si ya tenían); los masivos en Histórico igual. Los niveles son opcionales: se guarda el más profundo elegido.
 - 2026-10-29 · Single-file con excepción: el JS vive en `public/app.js` porque la CSP no permite script inline.
 - 2026-10-29 · Login: código de 8 dígitos generado en `/api/auth/send`, enviado por Resend; Supabase solo emite la sesión (`generateLink` → `verifyOtp` con `token_hash`).
 - 2026-10-29 · Protocolo de entrega adaptado en `CLAUDE.md` (single-file; funciones Vercel en lugar de Edge).
@@ -27,7 +28,7 @@ Organizador personal de imágenes de un generador. Sube lotes `<ts>-<hash>-<seq>
 ## 2. Estado por pieza
 | Pieza | Versión | Estado |
 |---|---|---|
-| `public/index.html` + `public/app.js` | v0.9.0 | clasificación en Admin; editor por galería; etiquetas de lote |
+| `public/index.html` + `public/app.js` | v0.10.0 | clasificación en Admin; editor por galería; etiquetas de lote |
 | `api/*` | v0.4.0 | `/api/traer` acepta lote+seqs o urls[] |
 | `api/auth/*` | v0.3.2 | login real confirmado por Hugo (2026-10-29 22:43) |
 | mig 01, 02 | — | aplicadas (2910.1, verificado por el chat vía MCP) |
