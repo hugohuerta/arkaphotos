@@ -1,4 +1,4 @@
-<!-- ARKAPHOTO v0.11.0 -->
+<!-- ARKAPHOTO v0.11.1 -->
 <!doctype html>
 <html lang="es">
 <head>
@@ -212,6 +212,12 @@ section.panel.col .cover{display:block}
 .lb .arrow.l{left:12px}.lb .arrow.r{right:12px}
 .lb footer{display:flex;justify-content:center;gap:10px;padding:12px;font-size:.85rem}
 .lb button.x{background:none;border:1px solid #444;color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer}
+/* barra de progreso del lote */
+.prog{position:relative;display:inline-flex;align-items:center;min-width:170px;height:26px;border-radius:999px;background:var(--miss-bg);border:1px solid var(--line);overflow:hidden;font-variant-numeric:tabular-nums;font-weight:600;font-size:.85rem;vertical-align:middle}
+.prog i{position:absolute;inset:0;width:0;background:var(--ok-bg);transition:width .3s}
+.prog.full i{background:var(--ok-bg)}
+.prog b{position:relative;padding:0 12px;color:var(--fg);white-space:nowrap}
+.prog small{font-weight:500;color:var(--muted);margin-left:6px}
 /* galería */
 .gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
 .gc{margin:0;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}

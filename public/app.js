@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-const CFG = { VERSION: '0.11.0', MIGRACION_ESPERADA: 10, URL_TTL: 3600 };
+const CFG = { VERSION: '0.11.1', MIGRACION_ESPERADA: 10, URL_TTL: 3600 };
 const $ = id => document.getElementById(id);
 const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
 const MAX = 32, BUCKET = 'arkaphoto';
@@ -189,6 +189,7 @@ $('fCfg').addEventListener('submit', async e=>{
 });
 
 // ---------- lógica de lotes
+const barra = (n, hasta, sond=true) => { const pct=hasta?Math.round(100*n/hasta):0; return `<span class="prog ${pct>=100?'full':''}" title="${sond?'tamaño sondeado en la ruta pública':'tamaño asumido por lo subido (sin sondear)'}"><i style="width:${pct}%"></i><b>${n} de ${hasta}${sond?'':' ?'}<small>${pct}%</small></b></span>`; };
 const pow2 = n => { let p=1; while(p<n) p*=2; return Math.min(MAX,p); };
 function rangoEsperado(L, key){
   const max = Math.max(1, ...L.items.keys()); const minimo = pow2(max);
@@ -309,7 +310,7 @@ function renderGalerias(){
     parts.push(`<section class="panel ${colapsados.has(key)?'col':''}" style="margin-bottom:16px" data-lote="${esc(key)}">
       <div class="ghead">
         <div class="izq"><span class="etq" title="${esc(key)}">${esc(etiqueta(key))}</span>${meta.clasif_id?'':'<span class="pill warn">sin clasificar</span>'}${r.fav?`<span class="pill ok">★ ${r.fav}</span>`:''}<span class="tags">${tg}</span></div>
-        <div class="der"><span class="cnt ${r.faltan?'miss':''}">${r.n} de ${r.hasta}</span>${r.ocultas?`<span class="pill warn" title="ocultas">✕ ${r.ocultas}</span>`:''}<button class="tgl pase" data-lote="${esc(key)}" title="Pase de diapositivas">▶ Pase</button><button class="tgl zip" data-lote="${esc(key)}" title="Descargar ZIP">↓ ZIP</button><button class="tgl colap" data-lote="${esc(key)}">${colapsados.has(key)?'Expandir':'Colapsar'}</button><span class="qtag"><button class="qadd" data-lote="${esc(key)}">+ Tag</button></span><button class="ed" data-lote="${esc(key)}">Editar</button></div>
+        <div class="der">${barra(r.n, r.hasta, !!meta.sondeado_en)}${r.ocultas?`<span class="pill warn" title="ocultas">✕ ${r.ocultas}</span>`:''}<button class="tgl pase" data-lote="${esc(key)}" title="Pase de diapositivas">▶ Pase</button><button class="tgl zip" data-lote="${esc(key)}" title="Descargar ZIP">↓ ZIP</button><button class="tgl colap" data-lote="${esc(key)}">${colapsados.has(key)?'Expandir':'Colapsar'}</button><span class="qtag"><button class="qadd" data-lote="${esc(key)}">+ Tag</button></span><button class="ed" data-lote="${esc(key)}">Editar</button></div>
       </div>
       ${pseq?`<div class="cover"><img src="${esc(L.items.get(pseq).url)}" alt="portada" data-seq="${pseq}"><span class="n">portada · ${pseq}</span></div>`:'<div class="cover note">Sin fotos visibles</div>'}
       <div class="gal ${galVista==='2x'?'x2':galVista==='lista'?'lista':''}">${cards.join('')}</div></section>`);
@@ -534,7 +535,7 @@ function render(){
     const d=document.createElement('div'); d.className='lote';
     const ruta=rutaClasif((lotesMeta.get(key)||{}).clasif_id).map(c=>esc(c.nombre)).join(' › ');
     const sel = hist?selHist:selCarga;
-    d.innerHTML = `<div class="lote-head"><input type="checkbox" class="selh" data-lote="${esc(key)}" ${sel.has(key)?'checked':''}><span class="etq" style="font-size:.9rem" title="${esc(key)}">${esc(etiqueta(key))}</span><span class="ruta">${ruta||'<span class="pill warn">sin clasificar</span>'}</span><span class="pill ${miss.length?'miss':'ok'}">${miss.length?miss.length+' faltantes':'completo'}</span><span class="pill warn" title="${(lotesMeta.get(key)||{}).sondeado_en?'tamaño sondeado en la ruta pública':'tamaño asumido por lo subido (sin sondear)'}">${L.items.size} de ${hasta}${(lotesMeta.get(key)||{}).sondeado_en?'':' ?'}</span></div>`;
+    d.innerHTML = `<div class="lote-head"><input type="checkbox" class="selh" data-lote="${esc(key)}" ${sel.has(key)?'checked':''}><span class="etq" style="font-size:.9rem" title="${esc(key)}">${esc(etiqueta(key))}</span><span class="ruta">${ruta||'<span class="pill warn">sin clasificar</span>'}</span><span class="pill ${miss.length?'miss':'ok'}">${miss.length?miss.length+' faltantes':'completo'}</span>${barra(L.items.size, hasta, !!(lotesMeta.get(key)||{}).sondeado_en)}</div>`;
     const g=document.createElement('div'); g.className='seq';
     for(let i=1;i<=MAX;i++){
       const c=document.createElement('div'); c.className='cell'; c.dataset.n=i;
