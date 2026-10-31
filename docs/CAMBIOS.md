@@ -1,5 +1,6 @@
 # CAMBIOS · ARKAPHOTO
 
+- v0.26.0 — 2026-10-31 — alias y casilla "rápida" en subcategorías (mig 17); en Galerías cada lote tiene selector ⚡ con los alias marcados para clasificarlo en un clic
 - v0.25.0 — 2026-10-31 — niveles renombrados Categoría › Subcategoría › Grupo (solo textos; la tabla no cambia); orden de las listas por nivel, alfabético o más uso (lotes bajo cada elemento), guardado en config (mig 16); el árbol de Admin muestra el uso
 - v0.24.1 — 2026-10-30 — aviso fijo cuando falla la lectura de lotes/imágenes/clasificación/tags (antes solo toast; con mig 15 pendiente el dashboard mostraba todo "sin clasificar" sin explicación)
 - v0.24.0 — 2026-10-30 — marca VALIDADO PREVIAMENTE en lotes (mig 15: `validado_en`, se limpia sola al entrar fotos): la pone TRAER sin resultados y el 404 definitivo de la cola; chips Por validar / Validados previamente; Sondear/Validar masivos la omiten (checkbox); Marcar/Quitar a mano

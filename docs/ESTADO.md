@@ -1,6 +1,6 @@
 # ESTADO · ARKAPHOTO
 
-Sesión: ARKAPHOTO — organizador de lotes · Versión: v0.25.0 · Última migración: 16 (`supabase/16_clasif_orden.sql`) · Actualizado: 2026-10-29
+Sesión: ARKAPHOTO — organizador de lotes · Versión: v0.26.0 · Última migración: 17 (`supabase/17_clasif_alias.sql`) · Actualizado: 2026-10-29
 
 ## 1. Qué es
 Organizador personal de imágenes de un generador. Sube lotes `<ts>-<hash>-<seq>.<ext>` (seq 1–32), detecta posiciones faltantes, las trae de una ruta pública (AWS) y guarda todo en Supabase Storage. Un solo usuario.
@@ -26,6 +26,7 @@ Organizador personal de imágenes de un generador. Sube lotes `<ts>-<hash>-<seq>
 - 2026-10-30 · Analizar (Carga de URL): el navegador agrupa por lote y manda tandas de 60 lotes a `/api/cola accion=analizar`, que sondea (6 en paralelo, 45 s) usando el tamaño ya guardado cuando existe, y devuelve faltan/existen/encoladas por lote; el navegador encola de 500 en 500. Las URLs listadas que ya existen no se vuelven a bajar.
 - 2026-10-30 · Completar lotes (cola, acción `completar` conservada en la API aunque ya sin botón): la base de la URL de cada lote actúa como su ruta pública; sondeo con la misma regla; lotes ya sondeados no se repiten; las posiciones encoladas llevan origen_archivo='completar'.
 - 2026-10-30 · Escala: PostgREST limita a 1,000 filas por consulta; `todas()` pagina con `range`. Las URLs firmadas se piden por lote al renderizar (`asegurarUrls`/`hidratarImgs`), con caché en memoria hasta 5 min antes de caducar. Galerías pagina 30 lotes ("Mostrar más"); Inicio lista 100. Estado al corregirlo: 2,570 fotos, 254 lotes, 6.2 GB.
+- 2026-10-31 · Clasificación rápida: alias (≤24) + casilla en subcategorías; el selector ⚡ de cada lote en Galerías asigna la subcategoría (clasif_id = nivel 2, por lo que un Grupo previo se pierde; se vuelve a afinar en Editar).
 - 2026-10-31 · Nomenclatura de niveles: Categoría (nivel 1) › Subcategoría (2) › Grupo (3). En código y tabla siguen siendo nivel 1/2/3 y los ids `*Tipo/*Sub/*Det`; solo cambió lo visible. La columna `orden` de arkaphoto_clasif ya no se usa para ordenar (alfabético o uso, por nivel, en config.clasif_orden).
 - 2026-10-30 · VALIDADO PREVIAMENTE = "se comprobó en el origen que las faltantes no existen". La ponen TRAER (lote sin traídas y con 404) y la cola (404 definitivo); se quita sola si entra una foto al lote (trigger) o a mano. Los masivos de Histórico la omiten por default; el Validar de la fila nunca.
 - 2026-10-30 · Calidad: al buscar una posición en el origen siempre se prueba .png antes que .jpg, sin importar la extensión listada o subida. Tras una subida en JPG se busca el PNG en el origen y, si existe, se reemplaza (objeto en Storage + fila). Costo: un 404 extra por foto en lotes solo-JPG; aceptado.
@@ -38,7 +39,7 @@ Organizador personal de imágenes de un generador. Sube lotes `<ts>-<hash>-<seq>
 ## 2. Estado por pieza
 | Pieza | Versión | Estado |
 |---|---|---|
-| `public/index.html` + `public/app.js` | v0.25.0 | clasificación en Admin; editor por galería; etiquetas de lote |
+| `public/index.html` + `public/app.js` | v0.26.0 | clasificación en Admin; editor por galería; etiquetas de lote |
 | `api/*` | v0.4.0 | `/api/traer` acepta lote+seqs o urls[] |
 | `api/auth/*` | v0.3.2 | login real confirmado por Hugo (2026-10-29 22:43) |
 | mig 01, 02 | — | aplicadas (2910.1, verificado por el chat vía MCP) |
@@ -56,6 +57,7 @@ Organizador personal de imágenes de un generador. Sube lotes `<ts>-<hash>-<seq>
 | mig 14 | — | aplicada por el chat vía MCP: config.cola_* (ritmo) |
 | mig 15 | — | aplicada por el chat vía MCP (09:55): `validado_en` en lotes + trigger revalida |
 | mig 16 | — | aplicada por el chat vía MCP: config.clasif_orden |
+| mig 17 | — | aplicada por el chat vía MCP: clasif.alias/rapida |
 
 ## 3.5 Asumidos
 - [asumido] 2026-10-29 · variables de Vercel configuradas: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, RESEND_API_KEY, RESEND_FROM (el proyecto de Vercel no es visible desde el MCP del chat).

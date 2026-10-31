@@ -1,5 +1,5 @@
 // Versión del backend; debe coincidir con CFG.VERSION del frontend en cada entrega.
 export const APP = 'ARKAPHOTO';
-export const VERSION = '0.25.0';
-export const MIGRACION_ESPERADA = 16;
+export const VERSION = '0.26.0';
+export const MIGRACION_ESPERADA = 17;
 export function conVersion(res){ res.setHeader('x-app-version', VERSION); return res; }

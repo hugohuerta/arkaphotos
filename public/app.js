@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-const CFG = { VERSION: '0.25.0', MIGRACION_ESPERADA: 16, URL_TTL: 3600 };
+const CFG = { VERSION: '0.26.0', MIGRACION_ESPERADA: 17, URL_TTL: 3600 };
 const $ = id => document.getElementById(id);
 const RX = /^(\d+)-([0-9a-fA-F]{32})-(\d{1,2})(?:\s*\((\d+)\))?\.(jpe?g|png)$/i;
 const MAX = 32, BUCKET = 'arkaphoto';
@@ -129,7 +129,7 @@ async function tagPorNombre(nombre){
   tags.set(data.id,data); return data;
 }
 async function cargarClasif(){
-  const { data, error } = await sb.from('arkaphoto_clasif').select('id,parent_id,nivel,nombre,orden').order('nivel').order('orden').order('nombre');
+  const { data, error } = await sb.from('arkaphoto_clasif').select('id,parent_id,nivel,nombre,orden,alias,rapida').order('nivel').order('orden').order('nombre');
   if(error){ avisoDatos('clasificación',error); return; }
   clasif.clear(); (data||[]).forEach(c=>clasif.set(c.id,c));
   cascCarga.pinta(); cascMasivo.pinta(); cascUrls.pinta();
@@ -395,6 +395,7 @@ function pasaFiltro(key, L, r, meta){
 }
 const GAL_PAG = 30; let galPag = 1;
 function renderGalerias(reset=false){
+  const rapidas=[...clasif.values()].filter(c=>c.nivel===2 && c.rapida && (c.alias||'').trim()).sort((a,b)=>a.alias.localeCompare(b.alias,'es',{sensitivity:'base'}));
   if(reset) galPag=1;
   pintaCascada(); pintaTagsFiltro();
   let total=0, fav=0, visibles=0; const parts=[];
@@ -423,9 +424,11 @@ function renderGalerias(reset=false){
     visibles++;
     if(visibles>galPag*GAL_PAG) continue;
     const tg=tagsDe(key).map(t=>`<span class="tag">${esc(t.nombre)}<button type="button" class="qdel" data-id="${t.id}" title="Quitar tag">✕</button></span>`).join('');
+    const subAct=rutaClasif(meta.clasif_id)[1]?.id||'';
+    const qc=rapidas.length?`<select class="qclas" data-lote="${esc(key)}" title="Clasificación rápida (alias de subcategoría)"><option value="">⚡ rápida</option>${rapidas.map(c=>`<option value="${c.id}"${c.id===subAct?' selected':''}>${esc(c.alias)}</option>`).join('')}</select>`:'';
     parts.push(`<section class="panel ${colapsados.has(key)?'col':''}" style="margin-bottom:16px" data-lote="${esc(key)}">
       <div class="ghead">
-        <div class="izq"><span class="etq" title="${esc(key)} · lote ${fmtFecha(fechaLote(key))} · cargado ${L.cargaEn?fmtFecha(new Date(L.cargaEn)):'—'}">${esc(etiqueta(key))}</span>${meta.clasif_id?'':'<span class="pill warn">sin clasificar</span>'}${r.fav?`<span class="pill ok">★ ${r.fav}</span>`:''}<span class="tags">${tg}</span></div>
+        <div class="izq"><span class="etq" title="${esc(key)} · lote ${fmtFecha(fechaLote(key))} · cargado ${L.cargaEn?fmtFecha(new Date(L.cargaEn)):'—'}">${esc(etiqueta(key))}</span>${meta.clasif_id?'':'<span class="pill warn">sin clasificar</span>'}${qc}${r.fav?`<span class="pill ok">★ ${r.fav}</span>`:''}<span class="tags">${tg}</span></div>
         <div class="der">${barra(r.n, r.hasta, !!meta.sondeado_en)}${r.ocultas?`<span class="pill warn" title="ocultas">✕ ${r.ocultas}</span>`:''}<button class="tgl pase" data-lote="${esc(key)}" title="Pase de diapositivas">▶ Pase</button><button class="tgl zip" data-lote="${esc(key)}" title="Descargar ZIP">↓ ZIP</button><button class="tgl colap" data-lote="${esc(key)}">${colapsados.has(key)?'Expandir':'Colapsar'}</button><span class="qtag"><button class="qadd" data-lote="${esc(key)}">+ Tag</button></span><button class="ed" data-lote="${esc(key)}">Editar</button></div>
       </div>
       ${pseq?`<div class="cover"><img ${L.items.get(pseq).url?`src="${esc(L.items.get(pseq).url)}"`:`data-ruta="${esc(L.items.get(pseq).ruta)}"`} alt="portada" data-seq="${pseq}"><span class="n">portada · ${pseq}</span></div>`:'<div class="cover note">Sin fotos visibles</div>'}
@@ -481,6 +484,10 @@ function abrirEditor(sec, key){
   });
   sec.querySelector('.ghead').after(f); f.nombre.focus();
 }
+$('galBody').addEventListener('change', async e=>{
+  const se=e.target.closest('select.qclas'); if(!se) return; const key=se.dataset.lote, id=Number(se.value)||null;
+  if(!id) return; const n=await clasificarLotes([key], id); if(n){ toast(`${etiqueta(key)} → ${rutaClasif(id).map(c=>c.nombre).join(' › ')}`); renderGalerias(); }
+});
 async function setTagLote(key, tagId, poner){
   if(poner){ const { error } = await sb.from('arkaphoto_lote_tags').insert({ user_id:session.user.id, lote:key, tag_id:tagId }); if(error && error.code!=='23505'){ toast('Tag: '+error.message); return false; } if(!loteTags.has(key)) loteTags.set(key,new Set()); loteTags.get(key).add(tagId); }
   else { const { error } = await sb.from('arkaphoto_lote_tags').delete().eq('lote',key).eq('tag_id',tagId); if(error){ toast('Tag: '+error.message); return false; } loteTags.get(key)?.delete(tagId); }
@@ -975,14 +982,20 @@ $('adminTags').addEventListener('click', async e=>{
 // ---------- ADMIN · clasificación
 function renderArbol(){
   const pinta=(nivel, pid, sel)=>{
-    const ul=$('cl'+nivel); ul.innerHTML = hijos(pid).map(c=>`<li class="${sel===c.id?'on':''}" data-id="${c.id}"><button class="item" type="button">${esc(c.nombre)}${usoClasif.get(c.id)?` <span class="note">· ${usoClasif.get(c.id)}</span>`:''}</button><button class="ico ren" type="button" title="Renombrar">✎</button><button class="ico del" type="button" title="Borrar">✕</button></li>`).join('') || '<li class="note" style="padding:6px 8px">Vacío</li>';
+    const ul=$('cl'+nivel); ul.innerHTML = hijos(pid).map(c=>`<li class="${sel===c.id?'on':''}" data-id="${c.id}">${nivel===2?`<input type="checkbox" class="rap" title="Mostrar en clasificación rápida de Galerías (requiere alias)" ${c.rapida?'checked':''} ${c.alias?'':'disabled'}>`:''}<button class="item" type="button">${esc(c.nombre)}${c.alias?` <span class="alias">${esc(c.alias)}</span>`:''}${usoClasif.get(c.id)?` <span class="note">· ${usoClasif.get(c.id)}</span>`:''}</button>${nivel===2?`<button class="ico ali" type="button" title="Alias para clasificación rápida">⚡</button>`:''}<button class="ico ren" type="button" title="Renombrar">✎</button><button class="ico del" type="button" title="Borrar">✕</button></li>`).join('') || '<li class="note" style="padding:6px 8px">Vacío</li>';
   };
   pinta(1,null,clSel[1]);
   const f2=document.querySelector('#cl2').nextElementSibling, f3=document.querySelector('#cl3').nextElementSibling;
   if(clSel[1]){ pinta(2,clSel[1],clSel[2]); f2.hidden=false; $('cl2note').hidden=true; } else { $('cl2').innerHTML=''; f2.hidden=true; $('cl2note').hidden=false; }
   if(clSel[2]){ pinta(3,clSel[2],null); f3.hidden=false; $('cl3note').hidden=true; } else { $('cl3').innerHTML=''; f3.hidden=true; $('cl3note').hidden=false; }
 }
+document.querySelector('.cols3').addEventListener('change', async e=>{
+  const ck=e.target.closest('input.rap'); if(!ck) return; const li=ck.closest('li[data-id]'); const id=Number(li.dataset.id), c=clasif.get(id);
+  const { error } = await sb.from('arkaphoto_clasif').update({ rapida:ck.checked }).eq('id',id);
+  if(error){ toast(error.message); ck.checked=!ck.checked; return; } c.rapida=ck.checked;
+});
 document.querySelector('.cols3').addEventListener('click', async e=>{
+  if(e.target.closest('input.rap')) return;
   const li=e.target.closest('li[data-id]'); if(!li) return;
   const id=Number(li.dataset.id), c=clasif.get(id);
   if(e.target.closest('.ren')){
@@ -990,6 +1003,13 @@ document.querySelector('.cols3').addEventListener('click', async e=>{
     const { error } = await sb.from('arkaphoto_clasif').update({ nombre:nuevo.trim() }).eq('id',id);
     if(error){ toast(error.code==='23505'?'Ya existe ese nombre en este nivel':error.message); return; }
     c.nombre=nuevo.trim(); renderArbol(); await cargarClasif(); return;
+  }
+  if(e.target.closest('.ali')){
+    const nuevo=prompt('Alias corto (máx. 24; vacío para quitar)', c.alias||''); if(nuevo===null) return;
+    const alias=nuevo.trim().slice(0,24)||null; const rapida=alias?c.rapida:false;
+    const { error } = await sb.from('arkaphoto_clasif').update({ alias, rapida }).eq('id',id);
+    if(error){ toast(error.message); return; }
+    c.alias=alias; c.rapida=rapida; renderArbol(); return;
   }
   if(e.target.closest('.del')){
     if(hijos(id).length){ toast('Primero borra sus elementos hijos'); return; }
