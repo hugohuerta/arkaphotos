@@ -1,4 +1,4 @@
-<!-- ARKAPHOTO v0.24.1 -->
+<!-- ARKAPHOTO v0.25.0 -->
 <!doctype html>
 <html lang="es">
 <head>
@@ -303,15 +303,15 @@ td.cl{white-space:nowrap}
       <div class="tile"><b id="dFav">0</b><span>favoritas</span><small id="dFavSub"></small></div>
     </div>
     <div class="panel" style="margin-bottom:18px">
-      <div class="row" style="justify-content:space-between;margin-bottom:10px"><h2 style="margin:0">Por tipo y subgrupo</h2><span class="note" id="dClasN"></span></div>
-      <div class="tw"><table class="t"><thead><tr><th>Tipo</th><th>Subgrupo</th><th>Lotes</th><th>Fotos</th><th>%</th><th>Espacio</th><th>Favoritas</th><th></th></tr></thead><tbody id="dClas"></tbody></table></div>
+      <div class="row" style="justify-content:space-between;margin-bottom:10px"><h2 style="margin:0">Por categoría y subcategoría</h2><span class="note" id="dClasN"></span></div>
+      <div class="tw"><table class="t"><thead><tr><th>Categoría</th><th>Subcategoría</th><th>Lotes</th><th>Fotos</th><th>%</th><th>Espacio</th><th>Favoritas</th><th></th></tr></thead><tbody id="dClas"></tbody></table></div>
     </div>
     <div class="panel">
       <div class="row" style="justify-content:space-between;margin-bottom:10px"><h2 style="margin:0">Últimos lotes</h2><span class="note" id="dLotesN"></span></div>
       <div class="fila" style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:12px">
         <label class="f">Desde<input type="date" id="dDesde" style="width:auto"></label>
         <label class="f">Hasta<input type="date" id="dHasta" style="width:auto"></label>
-        <label class="f">Subgrupo<select id="dSub" style="width:auto;min-width:160px"><option value="">Todos</option></select></label>
+        <label class="f">Subcategoría<select id="dSub" style="width:auto;min-width:160px"><option value="">Todos</option></select></label>
         <label class="f" style="flex:1 1 200px">Buscar<input type="search" id="dBuscar" placeholder="nombre, clave, clasificación, tag, notas"></label>
         <button class="quiet" id="dLimpiar">Limpiar</button>
       </div>
@@ -326,9 +326,9 @@ td.cl{white-space:nowrap}
         <div class="box">
           <h3>Filtro</h3>
           <div class="fila">
-            <label class="f">Tipo<select id="fTipo"><option value="">Todos los tipos</option></select></label>
-            <label class="f" id="fSubL" hidden>Subgrupo<select id="fSub"><option value="">Todos</option></select></label>
-            <label class="f" id="fDetL" hidden>Detalle<select id="fDet"><option value="">Todos</option></select></label>
+            <label class="f">Categoría<select id="fTipo"><option value="">Todas las categorías</option></select></label>
+            <label class="f" id="fSubL" hidden>Subcategoría<select id="fSub"><option value="">Todos</option></select></label>
+            <label class="f" id="fDetL" hidden>Grupo<select id="fDet"><option value="">Todos</option></select></label>
             <label class="f">Formato<select id="fFormato" style="width:auto"><option value="">Todos</option><option value="1:1">Cuadrada 1:1</option><option value="16:9">Horizontal 16:9</option><option value="9:16">Vertical 9:16</option><option value="4:3">Horizontal 4:3</option><option value="3:4">Vertical 3:4</option><option value="otro">Otro</option><option value="?">Sin medir</option></select></label>
             <label class="f" style="flex:1 1 200px">Buscar<input type="search" id="fBuscar" placeholder="nombre, clave, clasificación, tag, notas"></label>
           </div>
@@ -376,11 +376,11 @@ td.cl{white-space:nowrap}
       <section class="panel" id="lotes" hidden style="margin-top:18px"></section>
       <section class="panel" id="cClasif" hidden style="margin-top:18px">
         <div class="row" style="justify-content:space-between;margin-bottom:8px"><h2 style="margin:0">Clasificar lo subido</h2><span class="note" id="cSelN"></span></div>
-        <p class="note" style="margin-bottom:10px">Marca los lotes de arriba a los que aplique y elige Tipo, Subgrupo y/o Detalle (no hacen falta los tres). Cada foto hereda la clasificación de su lote.</p>
+        <p class="note" style="margin-bottom:10px">Marca los lotes de arriba a los que aplique y elige Categoría, Subcategoría y/o Grupo (no hacen falta los tres). Cada foto hereda la clasificación de su lote.</p>
         <div class="lote-ed" style="margin-top:0">
-          <label class="f">Tipo<select id="cTipo"><option value="">—</option></select></label>
-          <label class="f">Subgrupo<select id="cSub"><option value="">—</option></select></label>
-          <label class="f">Detalle<select id="cDet"><option value="">—</option></select></label>
+          <label class="f">Categoría<select id="cTipo"><option value="">—</option></select></label>
+          <label class="f">Subcategoría<select id="cSub"><option value="">—</option></select></label>
+          <label class="f">Grupo<select id="cDet"><option value="">—</option></select></label>
           <div class="full"><button class="primary" id="btnCargaOk">Aplicar a los seleccionados</button></div>
         </div>
         <div class="ask" id="cListo" hidden style="margin-top:12px"><p><b>FOTOS CLASIFICADAS</b> · <span id="cListoTxt"></span></p><button class="primary" id="btnNuevaCarga">Nueva carga</button><button id="btnSeguir">Seguir aquí</button></div>
@@ -401,9 +401,9 @@ td.cl{white-space:nowrap}
           <div class="row"><button id="btnSondearSel" title="Vuelve a determinar el tamaño del lote en la ruta pública">Sondear tamaño</button><button id="btnValidarSel" title="Con selección: resondea 32/16/8/4/2 con ambas extensiones y lista faltantes">Validar faltantes</button><button class="primary" id="btnMasivo">Clasificar seleccionados</button><label class="row" style="gap:6px;margin-left:8px;font-size:13px"><input type="checkbox" id="histOmitirVal" checked style="width:16px;height:16px;margin:0">Omitir validados previamente</label><button id="btnMarcarVal" class="quiet" title="Marca a mano los seleccionados como ya validados contra el origen">Marcar validados</button><button id="btnQuitarVal" class="quiet">Quitar marca</button></div>
         </div>
         <div id="masivo" hidden class="lote-ed" style="margin-top:12px">
-          <label class="f">Tipo<select id="mTipo"><option value="">—</option></select></label>
-          <label class="f">Subgrupo<select id="mSub"><option value="">—</option></select></label>
-          <label class="f">Detalle<select id="mDet"><option value="">—</option></select></label>
+          <label class="f">Categoría<select id="mTipo"><option value="">—</option></select></label>
+          <label class="f">Subcategoría<select id="mSub"><option value="">—</option></select></label>
+          <label class="f">Grupo<select id="mDet"><option value="">—</option></select></label>
           <div class="full"><button class="primary" id="btnMasivoOk">Aplicar a los seleccionados</button><button id="btnMasivoNo">Cancelar</button></div>
         </div>
       </div>
@@ -441,9 +441,9 @@ td.cl{white-space:nowrap}
       <div class="row" style="margin-bottom:8px"><label class="btnlink" for="urlsFile">📄 Subir archivo .txt / .json</label><input type="file" id="urlsFile" accept=".txt,.json,text/plain,application/json" style="display:none"><span class="note" id="urlsFileN"></span></div>
       <textarea id="urlsTxt" placeholder="https://r2-us-west.photoai.com/1790023723-97bc931c14c0c7ef41258f2206c04e91-16.png"></textarea>
       <div class="lote-ed" style="margin-top:10px">
-        <label class="f">Tipo<select id="uTipo"><option value="">—</option></select></label>
-        <label class="f">Subgrupo<select id="uSub"><option value="">—</option></select></label>
-        <label class="f">Detalle<select id="uDet"><option value="">—</option></select></label>
+        <label class="f">Categoría<select id="uTipo"><option value="">—</option></select></label>
+        <label class="f">Subcategoría<select id="uSub"><option value="">—</option></select></label>
+        <label class="f">Grupo<select id="uDet"><option value="">—</option></select></label>
         <div class="full" style="align-items:center"><span class="note">Clasificación que recibirán los lotes al traerse (opcional; se aplica cuando baja la primera foto del lote).</span></div>
       </div>
       <div class="row" style="margin-top:10px"><button class="primary" id="btnAnalizar">Analizar y encolar</button><span class="note" id="urlsResumen"></span></div>
@@ -460,8 +460,8 @@ td.cl{white-space:nowrap}
       </div>
     </div>
     <div class="panel" id="urlsTabla" hidden style="margin-top:18px">
-      <p class="note" id="urlsTablaN" style="margin-bottom:8px"></p><p class="note" style="margin-bottom:8px">La clasificación de arriba se aplica a todos los lotes al encolar; en cada fila puedes cambiarla (Tipo y Subgrupo). Se guarda al instante en la cola y en el lote.</p>
-      <div class="tw"><table class="t"><thead><tr><th>Lote</th><th>En lista</th><th>Tamaño</th><th>A traer</th><th>Ya existen</th><th>En cola</th><th>Clasificación (Tipo › Subgrupo)</th></tr></thead><tbody id="urlsBody"></tbody></table></div>
+      <p class="note" id="urlsTablaN" style="margin-bottom:8px"></p><p class="note" style="margin-bottom:8px">La clasificación de arriba se aplica a todos los lotes al encolar; en cada fila puedes cambiarla (Categoría y Subcategoría). Se guarda al instante en la cola y en el lote.</p>
+      <div class="tw"><table class="t"><thead><tr><th>Lote</th><th>En lista</th><th>Tamaño</th><th>A traer</th><th>Ya existen</th><th>En cola</th><th>Clasificación (Categoría › Subcategoría)</th></tr></thead><tbody id="urlsBody"></tbody></table></div>
     </div>
 
     <div class="panel" style="margin-top:18px">
@@ -527,11 +527,19 @@ td.cl{white-space:nowrap}
     </div>
     <div class="panel">
       <h2>Clasificación de galerías</h2>
-      <p class="note" style="margin-bottom:10px">Tres niveles: Tipo → Subgrupo → Detalle. Selecciona un elemento para ver y crear los del siguiente nivel. Un elemento con hijos o con galerías asignadas no se puede borrar.</p>
+      <p class="note" style="margin-bottom:10px">Tres niveles: Categoría → Subcategoría → Grupo. Selecciona un elemento para ver y crear los del siguiente nivel. Un elemento con hijos o con galerías asignadas no se puede borrar.</p>
+      <form class="row" id="fOrdenClasif" style="margin-bottom:12px;align-items:end">
+        <span class="note" style="align-self:center">Orden de las listas:</span>
+        <label class="f">Categoría<select data-nivel="1" style="width:auto"><option value="alfa">Alfabético</option><option value="uso">Más uso</option></select></label>
+        <label class="f">Subcategoría<select data-nivel="2" style="width:auto"><option value="alfa">Alfabético</option><option value="uso">Más uso</option></select></label>
+        <label class="f">Grupo<select data-nivel="3" style="width:auto"><option value="alfa">Alfabético</option><option value="uso">Más uso</option></select></label>
+        <button type="submit">Guardar orden</button>
+        <span class="note" style="align-self:center">"Más uso" = lotes clasificados bajo cada elemento. Aplica a todos los selectores de la app.</span>
+      </form>
       <div class="cols3">
-        <div class="col"><h3>1 · Tipo</h3><ul id="cl1"></ul><form data-nivel="1"><input type="text" placeholder="Nuevo tipo" maxlength="60"><button type="submit">+</button></form></div>
-        <div class="col"><h3>2 · Subgrupo</h3><ul id="cl2"></ul><form data-nivel="2" hidden><input type="text" placeholder="Nuevo subgrupo" maxlength="60"><button type="submit">+</button></form><p class="note" id="cl2note">Selecciona un tipo</p></div>
-        <div class="col"><h3>3 · Detalle</h3><ul id="cl3"></ul><form data-nivel="3" hidden><input type="text" placeholder="Nuevo detalle" maxlength="60"><button type="submit">+</button></form><p class="note" id="cl3note">Selecciona un subgrupo</p></div>
+        <div class="col"><h3>1 · Categoría</h3><ul id="cl1"></ul><form data-nivel="1"><input type="text" placeholder="Nueva categoría" maxlength="60"><button type="submit">+</button></form></div>
+        <div class="col"><h3>2 · Subcategoría</h3><ul id="cl2"></ul><form data-nivel="2" hidden><input type="text" placeholder="Nueva subcategoría" maxlength="60"><button type="submit">+</button></form><p class="note" id="cl2note">Selecciona una categoría</p></div>
+        <div class="col"><h3>3 · Grupo</h3><ul id="cl3"></ul><form data-nivel="3" hidden><input type="text" placeholder="Nuevo grupo" maxlength="60"><button type="submit">+</button></form><p class="note" id="cl3note">Selecciona una subcategoría</p></div>
       </div>
     </div>
   </div>

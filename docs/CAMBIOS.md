@@ -1,5 +1,6 @@
 # CAMBIOS · ARKAPHOTO
 
+- v0.25.0 — 2026-10-31 — niveles renombrados Categoría › Subcategoría › Grupo (solo textos; la tabla no cambia); orden de las listas por nivel, alfabético o más uso (lotes bajo cada elemento), guardado en config (mig 16); el árbol de Admin muestra el uso
 - v0.24.1 — 2026-10-30 — aviso fijo cuando falla la lectura de lotes/imágenes/clasificación/tags (antes solo toast; con mig 15 pendiente el dashboard mostraba todo "sin clasificar" sin explicación)
 - v0.24.0 — 2026-10-30 — marca VALIDADO PREVIAMENTE en lotes (mig 15: `validado_en`, se limpia sola al entrar fotos): la pone TRAER sin resultados y el 404 definitivo de la cola; chips Por validar / Validados previamente; Sondear/Validar masivos la omiten (checkbox); Marcar/Quitar a mano
 - v0.23.0 — 2026-10-30 — Histórico: orden (fecha de carga/lote, faltantes, fotos), filtros por tamaño de lote, fotos en lote y faltantes mínimos; contador "N de M lotes"
